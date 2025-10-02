@@ -1,123 +1,74 @@
 # app/main.py
-import os
-import asyncio
-from typing import Optional, Dict, Any
-
-import httpx
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Query
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+import os
+import requests
 
-APP_TITLE = "ProTracker API"
-FACEIT_API_KEY = os.environ.get("FACEIT_API_KEY")  # 在 Render 的 Environment 里配置
-FACEIT_API_BASE = "https://open.faceit.com/data/v4"
+app = FastAPI(title="Faceit Pro Tracker API")
 
-if not FACEIT_API_KEY:
-    # 仍允许应用启动，但在请求时给出明确错误
-    pass
+# ---------- 前端静态 ----------
+# 把静态目录挂在 /static，避免覆盖 /players 等 API 路由
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+# 根路径返回前端页面
+@app.get("/", include_in_schema=False)
+def home():
+    index_path = os.path.join(STATIC_DIR, "index.html")
+    return FileResponse(index_path)
+
+# ---------- API 示例（可用即可） ----------
+FACEIT_API_KEY = os.getenv("FACEIT_API_KEY", "").strip()
+FACEIT_BASE = "https://open.faceit.com/data/v4"
 HEADERS = {"Authorization": f"Bearer {FACEIT_API_KEY}"} if FACEIT_API_KEY else {}
 
-app = FastAPI(title=APP_TITLE)
-
-# 允许前端跨域（如果你把网页托管在同一个服务，其实也无所谓）
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# 1) 首页/静态页面：把仓库中的 static/index.html 作为网站首页
-#    说明：FastAPI 先匹配已定义的 API 路由，再交给静态文件，因此不会“遮住”下面的 /players 等接口
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
-
-@app.get("/healthz")
-def healthz() -> Dict[str, Any]:
-    return {"ok": True, "app": APP_TITLE}
-
-# ---- Faceit 封装 ----
-async def _get_json(client: httpx.AsyncClient, url: str, params: Optional[dict] = None) -> dict:
+def _faceit_get(url, params=None):
     if not FACEIT_API_KEY:
-        raise HTTPException(status_code=500, detail="FACEIT_API_KEY is not configured on the server.")
-    r = await client.get(url, params=params or {}, headers=HEADERS, timeout=20.0)
-    if r.status_code >= 400:
-        # 透传 faceit 错误更易排查
-        raise HTTPException(status_code=r.status_code, detail=r.text)
-    return r.json()
+        # 没配 key 也要有可读的错误提示
+        return None, {"error": "FACEIT_API_KEY is not set in environment variables."}
+    try:
+        r = requests.get(url, headers=HEADERS, params=params, timeout=15)
+        if r.status_code >= 400:
+            return None, {"error": f"Faceit API {r.status_code}", "detail": r.text}
+        return r.json(), None
+    except Exception as e:
+        return None, {"error": "request_failed", "detail": str(e)}
 
-# 2) 查玩家：/players?query=donk666
 @app.get("/players")
-async def search_players(query: str = Query(..., min_length=1)):
-    async with httpx.AsyncClient(base_url=FACEIT_API_BASE) as client:
-        data = await _get_json(client, "/players", params={"nickname": query})
-    # 如果 nickname 不存在，官方接口也可能返回 404；上面已抛异常
+def search_player(query: str = Query(..., description="Faceit 昵称")):
+    """
+    返回形如：
+    {
+      "player_id": "...",
+      "nickname": "donk666",
+      "found": true
+    }
+    """
+    # 用官方搜索接口拿第一个结果
+    url = f"{FACEIT_BASE}/search/players"
+    data, err = _faceit_get(url, params={"nickname": query, "game": "cs2", "limit": 1})
+    if err:
+        return JSONResponse(err, status_code=400)
+
+    items = (data or {}).get("items", [])
+    if not items:
+        return {"found": False}
+
+    p = items[0]
     return {
-        "player_id": data.get("player_id"),
-        "nickname": data.get("nickname"),
-        "found": bool(data.get("player_id")),
+        "player_id": p.get("id") or p.get("player_id"),
+        "nickname": p.get("nickname") or p.get("name") or query,
+        "found": True,
     }
 
-# 3) 查最近比赛（带个人统计）：/matches/with_stats?player_id=...&limit=5&game=cs2
 @app.get("/matches/with_stats")
-async def matches_with_stats(
-    player_id: str,
-    limit: int = 5,
-    game: str = "cs2",
-):
-    limit = max(1, min(limit, 20))  # 防止一次拉太多
-    async with httpx.AsyncClient(base_url=FACEIT_API_BASE) as client:
-        # 先拿比赛列表
-        history = await _get_json(
-            client,
-            f"/players/{player_id}/history",
-            params={"game": game, "size": limit},
-        )
-        items = history.get("items", [])
-
-        async def one(match: dict):
-            mid = match.get("match_id")
-            if not mid:
-                return None
-            # 获取比赛统计，定位到该玩家的统计项
-            stats = await _get_json(client, f"/matches/{mid}/stats")
-            pstat = None
-            try:
-                rounds = stats.get("rounds", [])
-                if rounds:
-                    for team in rounds[0]["teams"]:
-                        for p in team.get("players", []):
-                            if p.get("player_id") == player_id:
-                                s = p.get("player_stats", {})
-                                # 字段可能为字符串，这里做一次安全转换
-                                def num(v, t=float):
-                                    if v is None:
-                                        return None
-                                    v = str(v).replace("%", "")
-                                    try:
-                                        return t(v)
-                                    except Exception:
-                                        return None
-                                pstat = {
-                                    "nickname": p.get("nickname"),
-                                    "kills": num(s.get("Kills"), int),
-                                    "deaths": num(s.get("Deaths"), int),
-                                    "assists": num(s.get("Assists"), int),
-                                    "kdratio": num(s.get("K/D Ratio")),
-                                    "kratio": num(s.get("K/R Ratio")),
-                                    "hs_percent": num(s.get("Headshots %")),
-                                    "result": team.get("team_stats", {}).get("Final Score"),
-                                }
-                                raise StopIteration
-            except StopIteration:
-                pass
-
-            return {
-                "match_id": mid,
-                "game": match.get("game_id", game),
-                "played_at": match.get("started_at"),
-                "stats": pstat,
-            }
-
-        results = [r for r in await asyncio.gather(*(one(m) for m in items)) if r]
-    return results
+def matches_with_stats(player_id: str, limit: int = 10):
+    """
+    简化实现：先返回最近对战历史；（需要更详细统计可再按 match_id 去 /matches/{id}/stats 拉）
+    """
+    url = f"{FACEIT_BASE}/players/{player_id}/history"
+    data, err = _faceit_get(url, params={"game": "cs2", "limit": limit})
+    if err:
+        return JSONResponse(err, status_code=400)
+    return data or []
