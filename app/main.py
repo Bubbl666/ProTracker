@@ -5,6 +5,22 @@ from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 
+# app/main.py
+from fastapi import FastAPI
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+
+app = FastAPI()
+
+# 如果还没有挂静态目录，添加这一行
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# 根路径返回你的页面
+@app.get("/", response_class=HTMLResponse)
+def _root():
+    return FileResponse("static/index.html")
+
+
 FACEIT_API_KEY = os.getenv("FACEIT_API_KEY")
 if not FACEIT_API_KEY:
     # 在 Render 上会用环境变量注入，这里只是防护
