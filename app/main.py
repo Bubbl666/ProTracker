@@ -1,202 +1,123 @@
-import os
-from typing import List, Dict, Any, Optional
-
-from fastapi import FastAPI, Query, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-import httpx
-
 # app/main.py
-from fastapi import FastAPI
-from fastapi.responses import FileResponse, HTMLResponse
+import os
+import asyncio
+from typing import Optional, Dict, Any
+
+import httpx
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from fastapi import FastAPI
+APP_TITLE = "ProTracker API"
+FACEIT_API_KEY = os.environ.get("FACEIT_API_KEY")  # 在 Render 的 Environment 里配置
+FACEIT_API_BASE = "https://open.faceit.com/data/v4"
 
-app = FastAPI()
-
-@app.get("/")
-def read_root():
-    return {"message": "ProTracker API is running! Try /player/donk666"}
-
-
-
-
-app = FastAPI()
-
-# 如果还没有挂静态目录，添加这一行
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# 根路径返回你的页面
-@app.get("/", response_class=HTMLResponse)
-def _root():
-    return FileResponse("static/index.html")
-
-
-FACEIT_API_KEY = os.getenv("FACEIT_API_KEY")
 if not FACEIT_API_KEY:
-    # 在 Render 上会用环境变量注入，这里只是防护
-    print("[WARN] FACEIT_API_KEY is not set. Set it in your Render service.")
+    # 仍允许应用启动，但在请求时给出明确错误
+    pass
 
-BASE = "https://open.faceit.com/data/v4"
-HEADERS = {"Authorization": f"Bearer {FACEIT_API_KEY}"}
+HEADERS = {"Authorization": f"Bearer {FACEIT_API_KEY}"} if FACEIT_API_KEY else {}
 
-app = FastAPI(title="FACEIT Pro Tracker API", version="0.1.0")
+app = FastAPI(title=APP_TITLE)
 
-# 允许同源前端访问（Render 同站托管时其实不需要，但保留更安全）
+# 允许前端跨域（如果你把网页托管在同一个服务，其实也无所谓）
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 若要限制，填你部署后的域名
-    allow_credentials=True,
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# 1) 首页/静态页面：把仓库中的 static/index.html 作为网站首页
+#    说明：FastAPI 先匹配已定义的 API 路由，再交给静态文件，因此不会“遮住”下面的 /players 等接口
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
-async def faceit_get(client: httpx.AsyncClient, url: str, params: Optional[Dict[str, Any]] = None):
-    """小工具：带鉴权 GET 请求 + 错误处理"""
+@app.get("/healthz")
+def healthz() -> Dict[str, Any]:
+    return {"ok": True, "app": APP_TITLE}
+
+# ---- Faceit 封装 ----
+async def _get_json(client: httpx.AsyncClient, url: str, params: Optional[dict] = None) -> dict:
     if not FACEIT_API_KEY:
-        raise HTTPException(status_code=500, detail="FACEIT_API_KEY not configured")
-    r = await client.get(url, headers=HEADERS, params=params, timeout=20)
+        raise HTTPException(status_code=500, detail="FACEIT_API_KEY is not configured on the server.")
+    r = await client.get(url, params=params or {}, headers=HEADERS, timeout=20.0)
     if r.status_code >= 400:
-        try:
-            data = r.json()
-        except Exception:
-            data = {"detail": r.text}
-        raise HTTPException(status_code=r.status_code, detail=data)
+        # 透传 faceit 错误更易排查
+        raise HTTPException(status_code=r.status_code, detail=r.text)
     return r.json()
 
-
+# 2) 查玩家：/players?query=donk666
 @app.get("/players")
-async def search_players(query: str = Query(..., min_length=1, max_length=32)):
-    """
-    通过昵称搜索玩家（精准到首个）。
-    返回：{ player_id, nickname }
-    """
-    async with httpx.AsyncClient() as client:
-        # 官方搜索接口
-        data = await faceit_get(
-            client,
-            f"{BASE}/search/players",
-            params={"nickname": query, "game": "cs2", "offset": 0, "limit": 1},
-        )
-        items = data.get("items", [])
-        if not items:
-            return {"player_id": None, "nickname": query, "found": False}
-        p = items[0]
-        return {
-            "player_id": p.get("player_id"),
-            "nickname": p.get("nickname") or query,
-            "found": True,
-        }
+async def search_players(query: str = Query(..., min_length=1)):
+    async with httpx.AsyncClient(base_url=FACEIT_API_BASE) as client:
+        data = await _get_json(client, "/players", params={"nickname": query})
+    # 如果 nickname 不存在，官方接口也可能返回 404；上面已抛异常
+    return {
+        "player_id": data.get("player_id"),
+        "nickname": data.get("nickname"),
+        "found": bool(data.get("player_id")),
+    }
 
-
+# 3) 查最近比赛（带个人统计）：/matches/with_stats?player_id=...&limit=5&game=cs2
 @app.get("/matches/with_stats")
-async def matches_with_stats(player_id: str, limit: int = 5):
-    """
-    获取玩家最近比赛并合并该玩家在每场中的统计。
-    返回：list[{match_id, map, region, finished_at, winner, score_f1, score_f2, player_stats:{...}}]
-    """
-    limit = max(1, min(limit, 20))  # 防止过大
-    async with httpx.AsyncClient() as client:
-        # 最近历史
-        hist = await faceit_get(
+async def matches_with_stats(
+    player_id: str,
+    limit: int = 5,
+    game: str = "cs2",
+):
+    limit = max(1, min(limit, 20))  # 防止一次拉太多
+    async with httpx.AsyncClient(base_url=FACEIT_API_BASE) as client:
+        # 先拿比赛列表
+        history = await _get_json(
             client,
-            f"{BASE}/players/{player_id}/history",
-            params={"game": "cs2", "offset": 0, "limit": limit},
+            f"/players/{player_id}/history",
+            params={"game": game, "size": limit},
         )
-        items: List[Dict[str, Any]] = hist.get("items", [])
-        if not items:
-            return []
+        items = history.get("items", [])
 
-        # 拉取每场的 stats
-        results = []
-        for it in items:
-            match_id = it.get("match_id")
-            if not match_id:
-                continue
+        async def one(match: dict):
+            mid = match.get("match_id")
+            if not mid:
+                return None
+            # 获取比赛统计，定位到该玩家的统计项
+            stats = await _get_json(client, f"/matches/{mid}/stats")
+            pstat = None
             try:
-                stats = await faceit_get(client, f"{BASE}/matches/{match_id}/stats")
-            except HTTPException:
-                # 部分比赛可能无权限或已清理，跳过
-                continue
+                rounds = stats.get("rounds", [])
+                if rounds:
+                    for team in rounds[0]["teams"]:
+                        for p in team.get("players", []):
+                            if p.get("player_id") == player_id:
+                                s = p.get("player_stats", {})
+                                # 字段可能为字符串，这里做一次安全转换
+                                def num(v, t=float):
+                                    if v is None:
+                                        return None
+                                    v = str(v).replace("%", "")
+                                    try:
+                                        return t(v)
+                                    except Exception:
+                                        return None
+                                pstat = {
+                                    "nickname": p.get("nickname"),
+                                    "kills": num(s.get("Kills"), int),
+                                    "deaths": num(s.get("Deaths"), int),
+                                    "assists": num(s.get("Assists"), int),
+                                    "kdratio": num(s.get("K/D Ratio")),
+                                    "kratio": num(s.get("K/R Ratio")),
+                                    "hs_percent": num(s.get("Headshots %")),
+                                    "result": team.get("team_stats", {}).get("Final Score"),
+                                }
+                                raise StopIteration
+            except StopIteration:
+                pass
 
-            # 从 stats 里找到这个 player 的统计
-            player_line = None
-            map_name = None
-            region = None
-            winner = None
-            score_f1 = None
-            score_f2 = None
-            finished_at = it.get("finished_at")
+            return {
+                "match_id": mid,
+                "game": match.get("game_id", game),
+                "played_at": match.get("started_at"),
+                "stats": pstat,
+            }
 
-            # 结构：rounds -> teams -> players
-            rounds = stats.get("rounds") or []
-            if rounds:
-                rnd0 = rounds[0]
-                map_name = rnd0.get("round_stats", {}).get("Map")
-                teams = rnd0.get("teams") or []
-                # 比分和胜者
-                try:
-                    t1, t2 = teams[0], teams[1]
-                    score_f1 = t1.get("team_stats", {}).get("Final Score")
-                    score_f2 = t2.get("team_stats", {}).get("Final Score")
-                    if (t1.get("team_stats", {}).get("Team") == rnd0.get("winner")):
-                        winner = "faction1"
-                    elif (t2.get("team_stats", {}).get("Team") == rnd0.get("winner")):
-                        winner = "faction2"
-                except Exception:
-                    pass
-
-                # 找玩家
-                for t in teams:
-                    for pl in t.get("players", []):
-                        if pl.get("player_id") == player_id:
-                            player_line = {
-                                "nickname": pl.get("nickname"),
-                                "kills": _safe_int(pl.get("player_stats", {}).get("Kills")),
-                                "deaths": _safe_int(pl.get("player_stats", {}).get("Deaths")),
-                                "kd_ratio": _safe_float(pl.get("player_stats", {}).get("K/D Ratio")),
-                                "hs_percent": _safe_percent(pl.get("player_stats", {}).get("Headshots %")),
-                                "adr": _safe_float(pl.get("player_stats", {}).get("ADR")),
-                                "triple_kills": _safe_int(pl.get("player_stats", {}).get("Triple Kills")),
-                                "quadro_kills": _safe_int(pl.get("player_stats", {}).get("Quadro Kills")),
-                                "penta_kills": _safe_int(pl.get("player_stats", {}).get("Penta Kills")),
-                            }
-                            break
-
-            results.append(
-                {
-                    "match_id": match_id,
-                    "map": map_name,
-                    "region": region,
-                    "finished_at": finished_at,
-                    "winner": winner,
-                    "score_f1": score_f1,
-                    "score_f2": score_f2,
-                    "player_stats": player_line,
-                }
-            )
-
-        return results
-
-
-def _safe_int(v):
-    try:
-        return int(str(v).strip())
-    except Exception:
-        return None
-
-
-def _safe_float(v):
-    try:
-        return float(str(v).replace(",", ".").strip())
-    except Exception:
-        return None
-
-
-def _safe_percent(v):
-    try:
-        s = str(v).replace("%", "").replace(",", ".").strip()
-        return float(s)
-    except Exception:
-        return None
+        results = [r for r in await asyncio.gather(*(one(m) for m in items)) if r]
+    return results
