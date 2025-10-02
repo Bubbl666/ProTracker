@@ -90,11 +90,12 @@ def get_player(query: str = Query(..., min_length=1)) -> Dict[str, Any]:
 # /matches/with_stats —— 拉取最近比赛 + 个人统计
 # 直接读取 Faceit 官方接口，无需本地采集/数据库
 # ------------------------------------------------------------------------------
+# --- 替换 app/main.py 里 matches_with_stats 的实现（或直接覆盖整个函数） ---
 @app.get("/matches/with_stats")
 def matches_with_stats(player_id: str, limit: int = 10) -> List[Dict[str, Any]]:
     require_key()
 
-    limit = max(1, min(limit, 20))  # Faceit 接口通常不建议太大
+    limit = max(1, min(limit, 20))
     # 1) 历史列表（CS2）
     hist = requests.get(
         f"{FACEIT_BASE}/players/{player_id}/history",
@@ -110,59 +111,84 @@ def matches_with_stats(player_id: str, limit: int = 10) -> List[Dict[str, Any]]:
     if not items:
         return []
 
+    def _to_int(v):
+        try:
+            return int(v)
+        except Exception:
+            try:
+                return int(float(v))
+            except Exception:
+                return 0
+
+    def _to_float(v):
+        try:
+            return float(v)
+        except Exception:
+            return 0.0
+
     out: List[Dict[str, Any]] = []
 
     for it in items:
         mid = it.get("match_id")
-        # 2) 每场统计（含玩家 K/D 等）
+        map_name = None
+        score = None
+        player_stat: Dict[str, Any] | None = None
+        stats_unavailable_reason = None
+
+        # 2) 拉统计
         try:
             stat = requests.get(
                 f"{FACEIT_BASE}/matches/{mid}/stats",
                 headers=HEADERS,
                 timeout=20,
             )
-        except Exception as e:
-            logger.warning("stats request error for %s: %s", mid, e)
-            stat = None
-
-        player_stat: Dict[str, Any] | None = None
-
-        if stat and stat.status_code == 200:
-            try:
+            if stat.status_code == 200:
                 s = stat.json()
                 rounds = s.get("rounds") or []
                 if rounds:
+                    # Map / Score 在 round_stats 里
+                    rs = rounds[0].get("round_stats") or {}
+                    map_name = rs.get("Map") or rs.get("Map Name") or map_name
+                    # 比如 "16 / 9" 或 "13 / 11"
+                    score = rs.get("Score") or rs.get("Final Score") or score
+
+                    # 找到该玩家
                     players = rounds[0].get("players", [])
                     for pl in players:
                         if pl.get("player_id") == player_id:
-                            # 统一一些字段名；不同比赛格式里键名可能略有差异
-                            def _to_float(v):
-                                try:
-                                    return float(v)
-                                except Exception:
-                                    return 0.0
-
-                            def _to_int(v):
-                                try:
-                                    return int(v)
-                                except Exception:
-                                    return 0
+                            # 兼容多版本字段
+                            kd = pl.get("k/d") or pl.get("K/D Ratio") or pl.get("kd")
+                            kr = pl.get("k/r") or pl.get("K/R Ratio") or pl.get("kr")
+                            adr = pl.get("adr") or pl.get("ADR")
+                            hs  = pl.get("hs") or pl.get("Headshots %") or pl.get("Headshots")
 
                             player_stat = {
                                 "nickname": pl.get("nickname"),
-                                "kills": _to_int(pl.get("kills")),
-                                "deaths": _to_int(pl.get("deaths")),
-                                "assists": _to_int(pl.get("assists")),
-                                "hs": _to_int(pl.get("hs")),  # 爆头数
-                                "kd": _to_float(pl.get("k/d") or pl.get("kd")),
-                                "kr": _to_float(pl.get("k/r")),
-                                "adr": _to_float(pl.get("adr")),
-                                "result": pl.get("result"),
+                                "kills": _to_int(pl.get("kills") or pl.get("Kills")),
+                                "deaths": _to_int(pl.get("deaths") or pl.get("Deaths")),
+                                "assists": _to_int(pl.get("assists") or pl.get("Assists")),
+                                "hs": _to_int(hs),
+                                "kd": _to_float(kd),
+                                "kr": _to_float(kr),
+                                "adr": _to_float(adr),
+                                "result": pl.get("result") or pl.get("Result"),
                                 "team": pl.get("team"),
                             }
                             break
-            except Exception as e:
-                logger.warning("parse stats error for %s: %s", mid, e)
+            elif stat.status_code in (403, 404):
+                stats_unavailable_reason = "not_ready_or_hidden"
+            else:
+                stats_unavailable_reason = f"http_{stat.status_code}"
+        except requests.RequestException:
+            stats_unavailable_reason = "network_error"
+
+        # 3) 如果依然没有 Map/Score，尝试从历史项里兜底（有些历史会带结果）
+        if not map_name:
+            # 有的历史对象里会塞到 results / teams 的自定义字段，这里做一次兜底解析
+            results = it.get("results") or {}
+            # 某些房型会把得分塞进 'score' 或自定义里，这里尽力而为
+            score = score or results.get("score") or results.get("Score")
+            # Map 通常只有 stats 里才有，拿不到就保持 None
 
         out.append(
             {
@@ -170,9 +196,11 @@ def matches_with_stats(player_id: str, limit: int = 10) -> List[Dict[str, Any]]:
                 "game": it.get("game_id"),
                 "started_at": it.get("started_at"),
                 "finished_at": it.get("finished_at"),
-                "results": it.get("results", {}),
+                "map": map_name,
+                "score": score,
                 "teams": it.get("teams", {}),
-                "player": player_stat,  # 可能为 None（接口缺失或解析失败）
+                "player": player_stat,              # 可能为 None（无公开统计）
+                "stats_unavailable_reason": stats_unavailable_reason,
             }
         )
 
