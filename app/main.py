@@ -10,6 +10,17 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/")
+def read_root():
+    return {"message": "ProTracker API is running! Try /player/donk666"}
+
+
+
+
 app = FastAPI()
 
 # 如果还没有挂静态目录，添加这一行
