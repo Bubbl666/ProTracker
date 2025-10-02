@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: faceit-pro-tracker
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    autoDeploy: true
+    envVars:
+      - key: FACEIT_API_KEY
+        sync: false # 在 Render 控制台中手动填写你的 key
+    routes:
+      - type: rewrite
+        source: /
+        destination: /static/index.html
+      - type: rewrite
+        source: /index.html
+        destination: /static/index.html
+staticPublishPath: static
