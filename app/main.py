@@ -7,12 +7,9 @@ import os
 import requests
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-# ---------------------------------------------------------------------
-# 基本配置
-# ---------------------------------------------------------------------
 app = FastAPI(title="ProTracker API", version="0.1.1")
 
 app.add_middleware(
@@ -23,145 +20,170 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 目录定位：main.py 位于 app/ 下，static 在仓库根目录
-ROOT_DIR = Path(__file__).resolve().parents[1]      # 仓库根
-STATIC_DIR = ROOT_DIR / "static"                    # static 目录
-INDEX_FILE = STATIC_DIR / "index.html"              # 首页路径
-
-# 挂载静态资源（可选，但建议）
+# 路径
+ROOT_DIR = Path(__file__).resolve().parents[1]
+STATIC_DIR = ROOT_DIR / "static"
+INDEX_FILE = STATIC_DIR / "index.html"
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-# Faceit API
+# Faceit
 BASE_URL = "https://open.faceit.com/data/v4"
 API_KEY = os.getenv("FACEIT_API_KEY")
 
 
 def faceit_get(endpoint: str, params: Optional[dict] = None):
-    """简化的 Faceit GET 包装。返回 dict 或 None。"""
     headers = {"Authorization": f"Bearer {API_KEY}"}
     url = f"{BASE_URL}{endpoint}"
-    resp = requests.get(url, headers=headers, params=params, timeout=20)
-    if resp.status_code != 200:
-        print(f"❌ Faceit API error {resp.status_code}: {resp.text}")
+    r = requests.get(url, headers=headers, params=params, timeout=25)
+    if r.status_code != 200:
+        print(f"[Faceit {r.status_code}] {endpoint} :: {r.text[:300]}")
         return None
     try:
-        return resp.json()
+        return r.json()
     except Exception:
         return None
 
 
-# ---------------------------------------------------------------------
-# Web 页面路由
-# ---------------------------------------------------------------------
+# ---------- Web ----------
 @app.get("/", response_class=HTMLResponse)
 def serve_index():
-    """根路径直接返回前端页面。"""
     if INDEX_FILE.exists():
         return FileResponse(str(INDEX_FILE))
-    # 找不到就给出清晰提示
     return HTMLResponse(
         "<h3>static/index.html 未找到</h3>"
-        "<p>请确认仓库根目录存在 <code>static/index.html</code>，"
-        "并已推送到 Render 后再访问。</p>",
+        "<p>请把前端放到 <code>static/</code> 目录并重新部署。</p>",
         status_code=500,
     )
 
 
-# 可保留一个健康检查（给你自己或 Render 用）
 @app.get("/api/health")
 def health():
     return {"ok": True, "service": "protracker", "version": "0.1.1"}
 
 
-# ---------------------------------------------------------------------
-# API：Players / Matches / Matches with Stats
-# ---------------------------------------------------------------------
+# ---------- API ----------
 @app.get("/players")
 def get_player(query: str = Query(..., description="玩家 nickname 或 id")):
     data = faceit_get("/players", {"nickname": query})
     if not data or "player_id" not in data:
         return {"found": False, "nickname": query}
-    return {
-        "player_id": data["player_id"],
-        "nickname": data["nickname"],
-        "found": True,
-    }
+    return {"player_id": data["player_id"], "nickname": data["nickname"], "found": True}
 
 
 @app.get("/matches")
 def get_matches(player_id: str, size: int = 5):
-    matches = faceit_get(f"/players/{player_id}/history", {"game": "cs2", "limit": size})
-    if not matches or "items" not in matches:
+    history = faceit_get(f"/players/{player_id}/history", {"game": "cs2", "limit": size})
+    if not history or "items" not in history:
         return []
-    return [
-        {
-            "match_id": m["match_id"],
-            "game": m.get("game_id"),
-            "started_at": m.get("started_at"),
-            "finished_at": m.get("finished_at"),
-            "map": m.get("map"),
-            "score": m.get("results", {}).get("score"),
-        }
-        for m in matches["items"]
-    ]
+    out = []
+    for m in history["items"]:
+        out.append(
+            {
+                "match_id": m["match_id"],
+                "game": m.get("game_id"),
+                "started_at": m.get("started_at"),
+                "finished_at": m.get("finished_at"),
+                "map": (m.get("map") or m.get("voting", {}).get("map")) or None,
+                "score": m.get("results", {}).get("score"),
+            }
+        )
+    return out
 
 
 @app.get("/matches/with_stats")
-def get_matches_with_stats(player_id: str, size: int = 5):
-    matches = faceit_get(f"/players/{player_id}/history", {"game": "cs2", "limit": size})
-    if not matches or "items" not in matches:
+def get_matches_with_stats(
+    player_id: str,
+    size: Optional[int] = Query(None, description="每页条数（旧参数名）"),
+    limit: Optional[int] = Query(None, description="每页条数（新参数名）"),
+):
+    lim = limit or size or 5
+    history = faceit_get(f"/players/{player_id}/history", {"game": "cs2", "limit": lim})
+    if not history or "items" not in history:
         return []
 
     results = []
-    for m in matches["items"]:
+    for m in history["items"]:
         match_id = m["match_id"]
         detail = faceit_get(f"/matches/{match_id}/stats")
 
-        match_info = {
+        # 默认值先填历史里的字段
+        info = {
             "match_id": match_id,
-            "game": m.get("game_id"),
+            "game": m.get("game_id") or "cs2",
             "started_at": m.get("started_at"),
             "finished_at": m.get("finished_at"),
-            "map": m.get("map"),
+            "map": (m.get("map") or m.get("voting", {}).get("map")) or None,
             "score": m.get("results", {}).get("score"),
             "teams": [],
             "player": None,
         }
 
-        if detail and "rounds" in detail and detail["rounds"]:
-            round_info = detail["rounds"][0]
-            teams = []
-            for team in round_info.get("teams", []):
-                players = []
-                for p in team.get("players", []):
-                    players.append(
+        if detail and detail.get("rounds"):
+            rnd = detail["rounds"][0]
+
+            # 从 round_stats 把地图/比分补齐
+            rstats = rnd.get("round_stats", {}) or {}
+            info["map"] = info["map"] or rstats.get("Map") or rstats.get("Map Name")
+            score_text = rstats.get("Score")
+            if isinstance(score_text, str) and "/" in score_text:
+                # 形如 "13 / 10"
+                info["score"] = score_text
+
+            # 组队 + 玩家
+            teams_out = []
+            flat_player = None
+            for t in rnd.get("teams", []):
+                players_out = []
+                for p in t.get("players", []):
+                    pstats = p.get("player_stats", {}) or {}
+                    players_out.append(
                         {
                             "player_id": p.get("player_id"),
                             "nickname": p.get("nickname"),
                             "avatar": p.get("avatar"),
-                            "stats": p.get("player_stats", {}),  # 详细统计
+                            "stats": pstats,
                         }
                     )
-                teams.append(
+
+                    # 扁平化目标玩家关键指标
+                    if p.get("player_id") == player_id:
+                        def _num(key: str, cast=float, default=None):
+                            v = pstats.get(key)
+                            if v is None:
+                                return default
+                            try:
+                                return cast(v)
+                            except Exception:
+                                try:
+                                    return cast(str(v).replace("%", ""))
+                                except Exception:
+                                    return default
+
+                        flat_player = {
+                            "nickname": p.get("nickname"),
+                            "kills": _num("Kills", int, 0),
+                            "deaths": _num("Deaths", int, 0),
+                            "assists": _num("Assists", int, 0),
+                            "adr": _num("ADR", float, 0.0),
+                            "hs": _num("Headshots %", float, 0.0),
+                            "kd": _num("K/D Ratio", float, 0.0),
+                            "kr": _num("K/R Ratio", float, 0.0),
+                            "raw": pstats,  # 保留原始
+                        }
+
+                teams_out.append(
                     {
-                        "team_id": team.get("team_id"),
-                        "nickname": team.get("nickname"),
-                        "players": players,
+                        "team_id": t.get("team_id"),
+                        "nickname": t.get("nickname"),
+                        "players": players_out,
                     }
                 )
-            match_info["teams"] = teams
 
-            # 找到目标玩家的统计
-            for team in teams:
-                for p in team["players"]:
-                    if p["player_id"] == player_id:
-                        match_info["player"] = {
-                            "nickname": p["nickname"],
-                            "stats": p.get("stats", {}),
-                        }
-                        break
+            info["teams"] = teams_out
+            if flat_player:
+                info["player"] = flat_player
 
-        results.append(match_info)
+        results.append(info)
 
     return results
