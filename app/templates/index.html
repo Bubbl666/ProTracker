@@ -38,15 +38,21 @@
     .err{color:#ff8a8a}
     .muted{color:var(--muted);}
 
-    /* —— 每位选手一列 —— */
+    /* —— 单行横向滚动分列 —— */
     .grid{
-      display:grid;
-      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      display:flex;
       gap:16px;
-      align-items:start;
+      overflow-x:auto;
+      padding-bottom:8px;
+      scroll-snap-type:x proximity;
     }
+    .grid::-webkit-scrollbar{height:10px}
+    .grid::-webkit-scrollbar-thumb{background:#203141; border-radius:8px}
 
     .player-col{
+      flex:0 0 380px;           /* 固定列宽，横向并排 */
+      max-width:380px;
+      scroll-snap-align:start;
       background:var(--panel); border:1px solid #1e2a35;
       border-radius:14px; padding:14px;
       box-shadow: 0 4px 24px rgba(0,0,0,.25);
@@ -94,10 +100,9 @@
       <button id="btn">刷新数据</button>
     </div>
 
-    <div class="hint">支持多玩家分列；Match 可点进 Faceit 房间页下载 Demo；比分按胜负自动上色；Rating 为 HLTV 2.0-like 估算；每场前显示比赛时间。</div>
+    <div class="hint">多玩家单行横向滚动；Match 可点进 Faceit 房间页下载 Demo；比分按胜负自动上色；Rating 为 HLTV 2.0-like；每场显示“选手本地时间”。</div>
     <div id="status" class="status muted"></div>
 
-    <!-- 多列容器 -->
     <div id="grid" class="grid"></div>
   </div>
 
@@ -109,7 +114,6 @@
     const statusEl = $('#status');
     const btn = $('#btn');
 
-    // 记住最近一次输入
     (function init(){
       const cached = localStorage.getItem('pt_names');
       if(cached) namesEl.value = cached;
@@ -121,48 +125,67 @@
       ));
     }
 
-    function tsToLocalString(sec){
+    // 秒 → 文本；支持自定义时区偏移（分钟）
+    function tsToLocalString(sec, tzOffsetMinutes){
       if(!sec) return '';
       try{
-        return new Date(sec * 1000).toLocaleString();
+        const d = new Date(sec * 1000);
+        if (typeof tzOffsetMinutes === 'number' && Number.isFinite(tzOffsetMinutes)) {
+          // 以 UTC 为基准 + 偏移
+          const utc = d.getTime() + d.getTimezoneOffset()*60000; // 先回到 UTC
+          const withTz = new Date(utc + tzOffsetMinutes*60000);
+          return withTz.toLocaleString();
+        }
+        return d.toLocaleString(); // 回退：浏览器本地时区
       }catch{ return ''; }
     }
 
-    // —— 统一“比分/胜负”展示 —— //
-    // 优先：m.score_text 或 m.score(字符串)；否则：用 Win/Loss 徽章
     function resolveWin(m){
       if (typeof m.won === 'boolean') return m.won;
       const res = m?.player?.stats?.Result;
       if (res !== undefined) return String(res) === '1';
       const s = m.score;
       if (s && typeof s === 'object' && typeof s.faction1 === 'number' && typeof s.faction2 === 'number'){
-        if (s.faction1 + s.faction2 > 1) return s.faction1 > s.faction2; // 真比分
-        if (s.faction1 !== s.faction2) return s.faction1 > s.faction2;   // 1/0 胜负指示
+        if (s.faction1 !== s.faction2) return s.faction1 > s.faction2;
       }
-      return undefined; // 无法判断
+      return undefined;
     }
 
-    function scoreBadgeHTML(m){
-      // 真实比分字符串
-      const scoreText = (m.score_text && String(m.score_text)) ||
-                        (typeof m.score === 'string' ? m.score : '');
+    function badge(cls, text){ return `<span class="score ${cls}">${text}</span>`; }
 
+    // 会尝试懒加载真实比分
+    function scoreBadgeHTML(m, colId){
       const won = resolveWin(m);
       const cls = (won === true) ? 'win' : (won === false) ? 'lose' : 'neutral';
 
-      if (scoreText) {
-        return `<span class="score ${cls}">Score: ${scoreText}</span>`;
-      }
+      // 如果后端已经给了字符串比分（推荐）
+      const scoreText = (m.score_text && String(m.score_text)) ||
+                        (typeof m.score === 'string' ? m.score : '');
 
-      // 没有真实比分，只能显示胜负
-      if (won === true)  return `<span class="score win">Win</span>`;
-      if (won === false) return `<span class="score lose">Loss</span>`;
-      return `<span class="score neutral">Score: -</span>`;
+      const nodeId = `${colId}-${m.match_id}-score`;
+
+      if (scoreText) return `<span id="${nodeId}" class="score ${cls}">Score: ${scoreText}</span>`;
+
+      // 没有真实比分：先放 Win/Loss，再异步查询真实比分并更新
+      setTimeout(()=> lazyFetchScore(m.match_id, nodeId, cls), 0);
+      if (won === true)  return `<span id="${nodeId}" class="score ${cls}">Win</span>`;
+      if (won === false) return `<span id="${nodeId}" class="score ${cls}">Loss</span>`;
+      return `<span id="${nodeId}" class="score neutral">Score: -</span>`;
     }
 
-    function chip(label, value){
-      return `<span class="chip"><b>${label}</b>: ${value}</span>`;
+    async function lazyFetchScore(matchId, nodeId, cls){
+      try{
+        const r = await fetch(`/match/score?match_id=${encodeURIComponent(matchId)}`);
+        if(!r.ok) return;
+        const j = await r.json();
+        if(j?.score_text){
+          const el = document.getElementById(nodeId);
+          if(el) el.outerHTML = `<span id="${nodeId}" class="score ${cls}">Score: ${j.score_text}</span>`;
+        }
+      }catch{}
     }
+
+    function chip(label, value){ return `<span class="chip"><b>${label}</b>: ${value}</span>`; }
 
     function playerHeader(nickname, profileUrl, count){
       return `
@@ -173,30 +196,30 @@
       `;
     }
 
-    function matchBlock(m){
+    function matchBlock(m, colId, tzOffset){
       const idLink = `<a href="${m.room_url}" target="_blank" rel="noopener noreferrer">${m.match_id}</a>`;
       const map = m.map || '-';
-      const when = tsToLocalString(m.started_at) || '';
-      const scoreHTML = scoreBadgeHTML(m);
+      // 优先：每场的 tz_offset / 每列（玩家）的 tz_offset；最终回退浏览器本地
+      const tz = (typeof m.tz_offset_minutes === 'number') ? m.tz_offset_minutes : tzOffset;
+      const when = tsToLocalString(m.started_at, tz);
 
-      const p = m.player || {};
       return `
         <div class="match">
           <div class="m-line">
             <span class="when">${when ? when + ' · ' : ''}</span>
             <span>Match: ${idLink}</span>
             <span>| Map: ${map}</span>
-            <span>| ${scoreHTML}</span>
+            <span>| ${scoreBadgeHTML(m, colId)}</span>
           </div>
           <div class="stats">
-            ${chip('Kills', p.kills ?? 0)}
-            ${chip('Deaths', p.deaths ?? 0)}
-            ${chip('Assists', p.assists ?? 0)}
-            ${chip('ADR', (p.adr ?? 0))}
-            ${chip('HS%', (p.hs ?? 0))}
-            ${chip('K/D', (p.kd ?? 0))}
-            ${chip('K/R', (p.kr ?? 0))}
-            ${chip('Rating', (p.rating_hltv2_like ?? 0))}
+            ${chip('Kills', m.player?.kills ?? 0)}
+            ${chip('Deaths', m.player?.deaths ?? 0)}
+            ${chip('Assists', m.player?.assists ?? 0)}
+            ${chip('ADR', (m.player?.adr ?? 0))}
+            ${chip('HS%', (m.player?.hs ?? 0))}
+            ${chip('K/D', (m.player?.kd ?? 0))}
+            ${chip('K/R', (m.player?.kr ?? 0))}
+            ${chip('Rating', (m.player?.rating_hltv2_like ?? 0))}
           </div>
         </div>
       `;
@@ -210,15 +233,19 @@
 
     async function loadOne(nickname, limit){
       const player = await fetchJSON(`/player?name=${encodeURIComponent(nickname)}`);
+      // 期望后端把玩家时区偏移（分钟）放在 tz_offset_minutes。没有的话前端会自动回退。
+      const tz = (typeof player.tz_offset_minutes === 'number') ? player.tz_offset_minutes : undefined;
+
       if(!player.found){
-        return { nickname, profile_url: `https://www.faceit.com/en/players/${encodeURIComponent(nickname)}`, matches: [], notFound: true };
+        return { nickname, profile_url: `https://www.faceit.com/en/players/${encodeURIComponent(nickname)}`, matches: [], notFound: true, tz };
       }
       const ms = await fetchJSON(`/matches/with_stats?player_id=${player.player_id}&limit=${limit}`);
-      return { nickname: player.nickname, profile_url: player.profile_url, matches: ms, notFound: false };
+      return { nickname: player.nickname, profile_url: player.profile_url, matches: ms, notFound: false, tz };
     }
 
     function renderColumns(results){
-      gridEl.innerHTML = results.map(res => {
+      gridEl.innerHTML = results.map((res, idx) => {
+        const colId = `col${idx}`;
         if(res.notFound){
           return `
             <div class="player-col">
@@ -227,9 +254,9 @@
             </div>
           `;
         }
-        const blocks = (res.matches||[]).map(matchBlock).join('');
+        const blocks = (res.matches||[]).map(m => matchBlock(m, colId, res.tz)).join('');
         return `
-          <div class="player-col">
+          <div class="player-col" id="${colId}">
             ${playerHeader(res.nickname, res.profile_url, res.matches?.length || 0)}
             ${blocks || `<div class="muted">暂无最近比赛。</div>`}
           </div>
