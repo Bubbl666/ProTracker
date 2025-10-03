@@ -44,19 +44,22 @@
     <select id="limit"><option value="5">每人 5 场</option><option value="10">每人 10 场</option></select>
     <button id="refresh">刷新数据</button>
   </div>
-  <div class="hint">提示：比分颜色表示胜负，点击 Score 跳转 Faceit 比赛；五杀（Penta）行会被高亮；时间显示为选手本地时区。</div>
+  <div class="hint">提示：比分颜色表示胜负，点击 <b>Score</b> 跳转 Faceit 比赛；五杀（Penta）行会高亮；时间按选手所在地时区显示。</div>
   <div id="grid" class="grid"></div>
 
 <script>
 const $=s=>document.querySelector(s);
 const grid=$("#grid"), inp=$("#players"), sel=$("#limit"), btn=$("#refresh");
-inp.value="donk666, niko, s1s1";
+inp.value="donk666, niko, s1s1"; // 默认示例
 btn.onclick=loadAll; window.onkeydown=e=>{if(e.key==="Enter")loadAll()};
 
 async function fetchPlayer(name,limit){
   const url=`/player?name=${encodeURIComponent(name)}&limit=${limit}`;
-  const r=await fetch(url,{cache:"no-store"}); if(!r.ok)throw Error(await r.text()); return r.json();
+  const r=await fetch(url,{cache:"no-store"});
+  if(!r.ok){ throw new Error(await r.text()); }
+  return r.json();
 }
+
 function playerCard(data){
   const rows=Array.isArray(data.matches)?data.matches:[];
   const col=document.createElement("div"); col.className="card";
@@ -87,12 +90,13 @@ function playerCard(data){
   }
   col.appendChild(table); return col;
 }
+
 let last=0;
 async function loadAll(){
   const names=inp.value.split(",").map(s=>s.trim()).filter(Boolean);
   const limit=parseInt(sel.value,10)||5;
   const run=++last; grid.textContent="加载中…";
-  const all=await Promise.all(names.map(n=>fetchPlayer(n,limit).catch(()=>({player:n,matches:[]}))));
+  const all=await Promise.all(names.map(n=>fetchPlayer(n,limit).catch(err=>({player:n,error:String(err),matches:[]}))));
   if(run!==last)return;
   grid.replaceChildren(...all.map(playerCard));
 }
