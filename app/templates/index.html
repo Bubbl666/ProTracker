@@ -17,13 +17,12 @@
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, "Noto Sans", "Noto Sans CJK SC", sans-serif;
       line-height:1.45;
     }
-    .wrap{max-width:1100px; margin:28px auto; padding:0 16px;}
+    .wrap{max-width:1400px; margin:28px auto; padding:0 16px;}
     h1{margin:0 0 18px; font-size:34px; color:#b7f6d6; letter-spacing:1px}
-    .bar{
-      display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:12px;
-    }
+
+    .bar{display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:12px;}
     textarea{
-      flex:1 1 640px; min-height:48px; max-height:120px; width:100%;
+      flex:1 1 740px; min-height:48px; max-height:120px; width:100%;
       background:#0b1218; border:1px solid #203141; color:var(--text);
       border-radius:10px; padding:12px 14px; outline:none; resize:vertical;
     }
@@ -34,11 +33,24 @@
     button{background:#173042; border-color:#21465d}
     button:hover{filter:brightness(1.1)}
     .hint{color:var(--muted); font-size:13px; margin:6px 0 16px}
+    .status{margin-bottom:12px}
+    .ok{color:#80ffaa}
+    .err{color:#ff8a8a}
+    .muted{color:var(--muted);}
 
-    .player-card{
+    /* —— 每位选手一列 —— */
+    .grid{
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap:16px;
+      align-items:start;
+    }
+
+    .player-col{
       background:var(--panel); border:1px solid #1e2a35;
-      border-radius:14px; padding:14px; margin:14px 0;
+      border-radius:14px; padding:14px;
       box-shadow: 0 4px 24px rgba(0,0,0,.25);
+      min-width:0;
     }
     .p-head{display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px}
     .p-title{font-size:20px; font-weight:700}
@@ -50,22 +62,20 @@
       background:var(--card); border:1px solid #1b2732;
       border-radius:12px; padding:12px; margin-top:10px;
     }
-    .m-line{font-size:14px; display:flex; flex-wrap:wrap; gap:6px}
+    .m-line{font-size:14px; display:flex; flex-wrap:wrap; gap:6px; align-items:center}
     .m-line a{color:#cbe3ff; text-decoration:none}
     .m-line a:hover{text-decoration:underline}
     .score{padding:2px 8px; border-radius:999px; font-weight:700; background:var(--chip)}
     .win{color:#0f2; background:rgba(0,255,128,.08); border:1px solid rgba(0,255,128,.2)}
     .lose{color:#ff6b6b; background:rgba(255,0,0,.08); border:1px solid rgba(255,0,0,.2)}
     .neutral{color:#c8ced6; background:rgba(255,255,255,.06); border:1px solid rgba(200,206,214,.15)}
+
     .stats{margin-top:8px; display:flex; flex-wrap:wrap; gap:8px}
     .chip{
       background:var(--chip); border:1px solid #1f2a35; color:#d8e6ef;
       padding:6px 10px; border-radius:999px; font-size:12px;
     }
-    .muted{color:var(--muted)}
-    .err{color:#ff8a8a; margin:8px 0}
-    .ok{color:#80ffaa}
-    .footer{color:#586674; font-size:12px; margin:28px 0 8px}
+    .when{color:#b6c4cf}
   </style>
 </head>
 <body>
@@ -76,27 +86,26 @@
       <textarea id="names" placeholder="输入多个 Faceit 昵称，逗号 或 换行 分隔。例如：donk666, niko"></textarea>
       <label class="small" for="limit">每人条数：</label>
       <select id="limit">
-        <option value="5">5</option>
-        <option value="10" selected>10</option>
+        <option value="5" selected>5</option>
+        <option value="10">10</option>
         <option value="15">15</option>
         <option value="20">20</option>
       </select>
       <button id="btn">刷新数据</button>
     </div>
 
-    <div class="hint">支持多玩家查询；Match 可点进 Faceit 房间页下载 Demo；比分按胜负自动上色；Rating 为 HLTV 2.0-like 估算。</div>
-    <div id="status" class="small muted"></div>
+    <div class="hint">支持多玩家分列；Match 可点进 Faceit 房间页下载 Demo；比分按胜负自动上色；Rating 为 HLTV 2.0-like 估算；每场前显示比赛时间。</div>
+    <div id="status" class="status muted"></div>
 
-    <div id="list"></div>
-
-    <div class="footer">© Pro Tracker 1.0</div>
+    <!-- 多列容器 -->
+    <div id="grid" class="grid"></div>
   </div>
 
   <script>
-    const $ = (sel) => document.querySelector(sel);
+    const $ = (s) => document.querySelector(s);
     const namesEl = $('#names');
     const limitEl = $('#limit');
-    const listEl = $('#list');
+    const gridEl = $('#grid');
     const statusEl = $('#status');
     const btn = $('#btn');
 
@@ -107,23 +116,55 @@
     })();
 
     function parseNames(raw){
-      return Array.from(
-        new Set(
-          raw.split(/[\n,，]+/).map(s=>s.trim()).filter(Boolean)
-        )
-      );
+      return Array.from(new Set(
+        raw.split(/[\n,，]+/).map(s=>s.trim()).filter(Boolean)
+      ));
     }
 
-    function fmtScore(f1, f2, won){
-      const cls = won === true ? 'win' : won === false ? 'lose' : 'neutral';
-      return `<span class="score ${cls}">Score: ${f1} / ${f2}</span>`;
+    function tsToLocalString(sec){
+      if(!sec) return '';
+      try{
+        return new Date(sec * 1000).toLocaleString();
+      }catch{ return ''; }
+    }
+
+    // —— 统一“比分/胜负”展示 —— //
+    // 优先：m.score_text 或 m.score(字符串)；否则：用 Win/Loss 徽章
+    function resolveWin(m){
+      if (typeof m.won === 'boolean') return m.won;
+      const res = m?.player?.stats?.Result;
+      if (res !== undefined) return String(res) === '1';
+      const s = m.score;
+      if (s && typeof s === 'object' && typeof s.faction1 === 'number' && typeof s.faction2 === 'number'){
+        if (s.faction1 + s.faction2 > 1) return s.faction1 > s.faction2; // 真比分
+        if (s.faction1 !== s.faction2) return s.faction1 > s.faction2;   // 1/0 胜负指示
+      }
+      return undefined; // 无法判断
+    }
+
+    function scoreBadgeHTML(m){
+      // 真实比分字符串
+      const scoreText = (m.score_text && String(m.score_text)) ||
+                        (typeof m.score === 'string' ? m.score : '');
+
+      const won = resolveWin(m);
+      const cls = (won === true) ? 'win' : (won === false) ? 'lose' : 'neutral';
+
+      if (scoreText) {
+        return `<span class="score ${cls}">Score: ${scoreText}</span>`;
+      }
+
+      // 没有真实比分，只能显示胜负
+      if (won === true)  return `<span class="score win">Win</span>`;
+      if (won === false) return `<span class="score lose">Loss</span>`;
+      return `<span class="score neutral">Score: -</span>`;
     }
 
     function chip(label, value){
       return `<span class="chip"><b>${label}</b>: ${value}</span>`;
     }
 
-    function playerCardHeader(nickname, profileUrl, count){
+    function playerHeader(nickname, profileUrl, count){
       return `
         <div class="p-head">
           <div class="p-title"><a href="${profileUrl}" target="_blank" rel="noopener noreferrer">${nickname}</a></div>
@@ -135,12 +176,14 @@
     function matchBlock(m){
       const idLink = `<a href="${m.room_url}" target="_blank" rel="noopener noreferrer">${m.match_id}</a>`;
       const map = m.map || '-';
-      const scoreHTML = fmtScore(m.score.faction1, m.score.faction2, m.won);
+      const when = tsToLocalString(m.started_at) || '';
+      const scoreHTML = scoreBadgeHTML(m);
 
       const p = m.player || {};
       return `
         <div class="match">
           <div class="m-line">
+            <span class="when">${when ? when + ' · ' : ''}</span>
             <span>Match: ${idLink}</span>
             <span>| Map: ${map}</span>
             <span>| ${scoreHTML}</span>
@@ -174,20 +217,20 @@
       return { nickname: player.nickname, profile_url: player.profile_url, matches: ms, notFound: false };
     }
 
-    function renderAll(results){
-      listEl.innerHTML = results.map(res => {
+    function renderColumns(results){
+      gridEl.innerHTML = results.map(res => {
         if(res.notFound){
           return `
-            <div class="player-card">
-              ${playerCardHeader(res.nickname, res.profile_url, 0)}
+            <div class="player-col">
+              ${playerHeader(res.nickname, res.profile_url, 0)}
               <div class="err">未找到该玩家。</div>
             </div>
           `;
         }
         const blocks = (res.matches||[]).map(matchBlock).join('');
         return `
-          <div class="player-card">
-            ${playerCardHeader(res.nickname, res.profile_url, res.matches?.length || 0)}
+          <div class="player-col">
+            ${playerHeader(res.nickname, res.profile_url, res.matches?.length || 0)}
             ${blocks || `<div class="muted">暂无最近比赛。</div>`}
           </div>
         `;
@@ -198,7 +241,7 @@
       const names = parseNames(namesEl.value);
       localStorage.setItem('pt_names', namesEl.value);
 
-      listEl.innerHTML = '';
+      gridEl.innerHTML = '';
       if(names.length === 0){
         statusEl.textContent = '请输入至少一个 Faceit 昵称（逗号或换行分隔）。';
         return;
@@ -217,7 +260,7 @@
           else errs.push({name: names[i], err: r.reason?.message || 'error'});
         });
 
-        renderAll(ok);
+        renderColumns(ok);
 
         if(errs.length === 0){
           statusEl.innerHTML = `<span class="ok">完成，共 ${ok.length} 位玩家。</span>`;
@@ -231,7 +274,6 @@
     }
 
     btn.addEventListener('click', run);
-    // 回车也触发
     namesEl.addEventListener('keydown', (e)=>{
       if(e.key === 'Enter' && (e.ctrlKey || e.metaKey)) run();
     });
