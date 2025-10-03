@@ -2,308 +2,263 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Pro Tracker 1.0</title>
+  <link rel="stylesheet" href="/static/main.css" />
   <style>
+    /* 轻量样式直接内联，便于你拷贝；也可移到 /static/main.css */
     :root{
-      --bg:#0f141a; --panel:#121a21; --text:#e7f5ef; --sub:#a7b3bd;
-      --green:#3ecf8e; --red:#ff5d5d; --blue:#5fbaff; --chip:#1a232c;
-      --card:#0f1820; --muted:#6b7680;
+      --bg:#0f1418; --panel:#111a20; --muted:#8aa1b1; --text:#e7f0f7;
+      --green:#31d0a0; --red:#ff5d5d; --chip:#1b2730; --chip2:#172129;
+      --border:#1a242c;
     }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0; background:var(--bg); color:var(--text);
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, "Noto Sans", "Noto Sans CJK SC", sans-serif;
-      line-height:1.45;
+    html,body{background:var(--bg); color:var(--text); font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial;}
+    .wrap{max-width:1400px; margin:24px auto; padding:0 16px;}
+    h1{font-weight:700; font-size:24px; letter-spacing:.5px; margin-bottom:16px;}
+    .controls{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px;}
+    .input, select, button{
+      background:#0c1216; color:var(--text); border:1px solid var(--border); border-radius:8px; padding:10px 12px;
     }
-    .wrap{max-width:1400px; margin:28px auto; padding:0 16px;}
-    h1{margin:0 0 18px; font-size:34px; color:#b7f6d6; letter-spacing:1px}
-
-    .bar{display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:12px;}
-    textarea{
-      flex:1 1 740px; min-height:48px; max-height:120px; width:100%;
-      background:#0b1218; border:1px solid #203141; color:var(--text);
-      border-radius:10px; padding:12px 14px; outline:none; resize:vertical;
-    }
-    select,button{
-      height:40px; border-radius:10px; border:1px solid #203141;
-      background:#0b1218; color:var(--text); padding:0 12px; cursor:pointer;
-    }
-    button{background:#173042; border-color:#21465d}
-    button:hover{filter:brightness(1.1)}
-    .hint{color:var(--muted); font-size:13px; margin:6px 0 16px}
-    .status{margin-bottom:12px}
-    .ok{color:#80ffaa}
+    .input{width:720px; max-width:100%;}
+    button{cursor:pointer}
+    .hint{color:var(--muted); margin:8px 0 16px 0; font-size:12px}
+    .ok{color:#75e6bd}
     .err{color:#ff8a8a}
-    .muted{color:var(--muted);}
 
-    /* —— 单行横向滚动分列 —— */
+    /* 栅格：每个玩家 = 一列 */
     .grid{
-      display:flex;
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
       gap:16px;
-      overflow-x:auto;
-      padding-bottom:8px;
-      scroll-snap-type:x proximity;
+      align-items:start;
     }
-    .grid::-webkit-scrollbar{height:10px}
-    .grid::-webkit-scrollbar-thumb{background:#203141; border-radius:8px}
+    .col{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:12px;
+      overflow:hidden;
+    }
+    .col .hd{
+      display:flex; justify-content:space-between; align-items:center;
+      padding:12px 14px; border-bottom:1px solid var(--border); background:#0f171d;
+    }
+    .nick{font-weight:700; font-size:16px}
+    .nick a{color:var(--text); text-decoration:none}
+    .nick a:hover{opacity:.85}
+    .sub{color:var(--muted); font-size:12px}
 
-    .player-col{
-      flex:0 0 380px;           /* 固定列宽，横向并排 */
-      max-width:380px;
-      scroll-snap-align:start;
-      background:var(--panel); border:1px solid #1e2a35;
-      border-radius:14px; padding:14px;
-      box-shadow: 0 4px 24px rgba(0,0,0,.25);
-      min-width:0;
+    /* 表格头在卡片内部出现一次（不是每行都重复） */
+    .tbl{width:100%; border-collapse:collapse; table-layout:fixed; font-variant-numeric:tabular-nums;}
+    .tbl thead th{
+      position:sticky; top:0; z-index:5;
+      background:#0f171d; border-bottom:1px solid var(--border);
+      color:var(--muted); font-weight:600; padding:8px 10px; text-align:left;
+      font-size:12px;
     }
-    .p-head{display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px}
-    .p-title{font-size:20px; font-weight:700}
-    .p-title a{color:var(--blue); text-decoration:none}
-    .p-title a:hover{text-decoration:underline}
-    .small{color:var(--muted); font-size:12px}
-
-    .match{
-      background:var(--card); border:1px solid #1b2732;
-      border-radius:12px; padding:12px; margin-top:10px;
-    }
-    .m-line{font-size:14px; display:flex; flex-wrap:wrap; gap:6px; align-items:center}
-    .m-line a{color:#cbe3ff; text-decoration:none}
-    .m-line a:hover{text-decoration:underline}
-    .score{padding:2px 8px; border-radius:999px; font-weight:700; background:var(--chip)}
-    .win{color:#0f2; background:rgba(0,255,128,.08); border:1px solid rgba(0,255,128,.2)}
-    .lose{color:#ff6b6b; background:rgba(255,0,0,.08); border:1px solid rgba(255,0,0,.2)}
-    .neutral{color:#c8ced6; background:rgba(255,255,255,.06); border:1px solid rgba(200,206,214,.15)}
-
-    .stats{margin-top:8px; display:flex; flex-wrap:wrap; gap:8px}
-    .chip{
-      background:var(--chip); border:1px solid #1f2a35; color:#d8e6ef;
-      padding:6px 10px; border-radius:999px; font-size:12px;
-    }
-    .when{color:#b6c4cf}
+    .tbl tbody td{padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:middle;}
+    .tbl tbody tr:last-child td{border-bottom:0}
+    .mut{color:var(--muted)}
+    .chip{background:var(--chip); padding:2px 8px; border-radius:999px; font-weight:700; font-size:12px; display:inline-block}
+    .win{color:var(--green)}
+    .loss{color:var(--red)}
+    .score{font-weight:700; padding:2px 6px; border-radius:6px; background:var(--chip2);}
+    .score.win{color:var(--green)}
+    .score.loss{color:var(--red)}
+    .map{opacity:.9}
+    .ka{color:#cde7ff}
+    .link{opacity:.9}
+    .link:hover{opacity:1}
+    .empty{padding:20px; color:var(--muted)}
+    .footer{margin:14px 0 0 0; color:var(--muted); font-size:12px}
+    .pill{border:1px solid var(--border); padding:0 6px; border-radius:999px; margin-left:6px}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>Pro Tracker 1.0</h1>
+<div class="wrap">
+  <h1>Pro Tracker 1.0</h1>
 
-    <div class="bar">
-      <textarea id="names" placeholder="输入多个 Faceit 昵称，逗号 或 换行 分隔。例如：donk666, niko"></textarea>
-      <label class="small" for="limit">每人条数：</label>
+  <div class="controls">
+    <textarea id="players" class="input" rows="1" placeholder="多个玩家名或ID，以逗号隔开，如：donk666, niko, s1mple"></textarea>
+    <label class="mut">每人条数：
       <select id="limit">
-        <option value="5" selected>5</option>
-        <option value="10">10</option>
-        <option value="15">15</option>
-        <option value="20">20</option>
+        <option>5</option><option>10</option><option>15</option>
       </select>
-      <button id="btn">刷新数据</button>
-    </div>
-
-    <div class="hint">多玩家单行横向滚动；Match 可点进 Faceit 房间页下载 Demo；比分按胜负自动上色；Rating 为 HLTV 2.0-like；每场显示“选手本地时间”。</div>
-    <div id="status" class="status muted"></div>
-
-    <div id="grid" class="grid"></div>
+    </label>
+    <button id="go">刷新数据</button>
+    <span id="status" class="mut"></span>
   </div>
 
-  <script>
-    const $ = (s) => document.querySelector(s);
-    const namesEl = $('#names');
-    const limitEl = $('#limit');
-    const gridEl = $('#grid');
-    const statusEl = $('#status');
-    const btn = $('#btn');
+  <div class="hint">
+    支持多玩家分列；Match 链接直达 Faceit 房间页（下载 Demo）；比分按阵营自动着色；Rating 为简化 HLTV 2.0-like 估算。
+  </div>
 
-    (function init(){
-      const cached = localStorage.getItem('pt_names');
-      if(cached) namesEl.value = cached;
-    })();
+  <div id="grid" class="grid"></div>
 
-    function parseNames(raw){
-      return Array.from(new Set(
-        raw.split(/[\n,，]+/).map(s=>s.trim()).filter(Boolean)
-      ));
-    }
+  <div class="footer">完成。<span id="count" class="pill">0 位玩家</span></div>
+</div>
 
-    // 秒 → 文本；支持自定义时区偏移（分钟）
-    function tsToLocalString(sec, tzOffsetMinutes){
-      if(!sec) return '';
-      try{
-        const d = new Date(sec * 1000);
-        if (typeof tzOffsetMinutes === 'number' && Number.isFinite(tzOffsetMinutes)) {
-          // 以 UTC 为基准 + 偏移
-          const utc = d.getTime() + d.getTimezoneOffset()*60000; // 先回到 UTC
-          const withTz = new Date(utc + tzOffsetMinutes*60000);
-          return withTz.toLocaleString();
-        }
-        return d.toLocaleString(); // 回退：浏览器本地时区
-      }catch{ return ''; }
-    }
+<script>
+const $ = sel => document.querySelector(sel);
+const el = (tag, cls, html) => {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (html !== undefined) n.innerHTML = html;
+  return n;
+};
 
-    function resolveWin(m){
-      if (typeof m.won === 'boolean') return m.won;
-      const res = m?.player?.stats?.Result;
-      if (res !== undefined) return String(res) === '1';
-      const s = m.score;
-      if (s && typeof s === 'object' && typeof s.faction1 === 'number' && typeof s.faction2 === 'number'){
-        if (s.faction1 !== s.faction2) return s.faction1 > s.faction2;
+async function fetchJSON(url){
+  const r = await fetch(url);
+  if(!r.ok) throw new Error(await r.text());
+  return await r.json();
+}
+
+/** 先拿 player 信息（拿 profile_url，也可用于时区） */
+async function getPlayer(raw){
+  const r = await fetchJSON(`/player?name=${encodeURIComponent(raw)}`);
+  return r;
+}
+
+/** 最近比赛 + 我们后端已经补充的 score_text / room_url / faction */
+async function getMatches(pid, limit){
+  return await fetchJSON(`/matches/with_stats?player_id=${encodeURIComponent(pid)}&limit=${limit}`);
+}
+
+/** 格式化时间（优先用浏览器本地时区；若你未来在 /player 返回 IANA tz，可在这里应用） */
+function fmtTime(ts){
+  if(!ts) return '—';
+  // Faceit返回的是秒
+  const d = new Date(Number(ts) * 1000);
+  return new Intl.DateTimeFormat(undefined, {
+    month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'
+  }).format(d);
+}
+
+function decideWinLoss(scoreText, faction){
+  // faction: 1/2 表示玩家所在阵营
+  if(!scoreText || !faction) return {cls:'', text:scoreText || '—'};
+  const m = scoreText.match(/(\d+)\s*\/\s*(\d+)/);
+  if(!m) return {cls:'', text:scoreText};
+  const a = Number(m[1]), b = Number(m[2]);
+  const win = (faction===1 ? a>b : b>a);
+  return {cls: win ? 'win' : 'loss', text: `${a} / ${b}`};
+}
+
+function row(match){
+  const tr = el('tr');
+  const started = fmtTime(match.started_at);
+  const scoreInfo = decideWinLoss(match.score, match.faction);
+
+  // 结果文字（WIN/LOSS）
+  let resultWord = '—';
+  if(scoreInfo.cls==='win') resultWord = 'WIN';
+  else if(scoreInfo.cls==='loss') resultWord = 'LOSS';
+
+  const p = match.player || {};
+  const k = p.kills ?? '—';
+  const a = p.assists ?? '—';
+  const d = p.deaths ?? '—';
+  const kd = p.kd ?? '—';
+  const adr = (p.adr!==undefined ? p.adr : '—');
+  const map = match.map ? match.map.replace(/^de_/, '') : '—';
+  const demo = match.room_url ? `<a class="link" href="${match.room_url}" target="_blank" title="Faceit 房间页">↗</a>` : '<span class="mut">—</span>';
+
+  tr.innerHTML = `
+    <td class="mut">${started}</td>
+    <td><span class="chip ${scoreInfo.cls}">${resultWord}</span></td>
+    <td><span class="score ${scoreInfo.cls}">${scoreInfo.text||'—'}</span></td>
+    <td class="ka">${k} / ${a} / ${d}</td>
+    <td>${kd}</td>
+    <td>${adr}</td>
+    <td class="map">${map}</td>
+    <td>${demo}</td>
+  `;
+  return tr;
+}
+
+function oneColumn(player, matches){
+  const card = el('div','col');
+
+  // 头
+  const hd = el('div','hd');
+  const nick = player?.nickname || 'Unknown';
+  const profile = player?.profile_url || null;
+  hd.append(
+    el('div','nick', profile ? `<a href="${profile}" target="_blank">${nick}</a>` : nick),
+    el('div','sub', `最近 ${matches.length} 场`)
+  );
+  card.append(hd);
+
+  // 表格
+  const tbl = el('table','tbl');
+  tbl.innerHTML = `
+    <thead>
+      <tr>
+        <th style="width:92px">日期</th>
+        <th style="width:66px">结果</th>
+        <th style="width:86px">比分</th>
+        <th>K / A / D</th>
+        <th style="width:60px">K/D</th>
+        <th style="width:70px">ADR</th>
+        <th style="width:80px">地图</th>
+        <th style="width:46px">Demo</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  `;
+  const tb = tbl.querySelector('tbody');
+
+  if(!matches.length){
+    const empty = el('div','empty','最近 0 场。');
+    card.append(empty);
+  }else{
+    matches.forEach(m => tb.append(row(m)));
+    card.append(tbl);
+  }
+  return card;
+}
+
+async function run(){
+  const status = $('#status');
+  const grid = $('#grid');
+  grid.innerHTML = '';
+  status.textContent = '加载中...';
+
+  const raw = $('#players').value.trim();
+  if(!raw){ status.textContent = '请输入玩家。'; return; }
+
+  const parts = raw.split(',').map(s=>s.trim()).filter(Boolean);
+  const limit = Number($('#limit').value);
+
+  let ok = 0;
+  for(const name of parts){
+    try{
+      const p = await getPlayer(name);
+      if(!p?.found || !p?.player_id){
+        grid.append( oneColumn({nickname:name}, []) );
+        continue;
       }
-      return undefined;
+      const ms = await getMatches(p.player_id, limit);
+      grid.append( oneColumn(p, ms) );
+      ok++;
+    }catch(e){
+      grid.append( oneColumn({nickname:name}, []) );
     }
+  }
+  $('#count').textContent = `${ok} 位玩家`;
+  status.textContent = ok ? '完成。' : '加载失败，请稍后重试。';
+}
 
-    function badge(cls, text){ return `<span class="score ${cls}">${text}</span>`; }
+$('#go').addEventListener('click', run);
+// 回车快捷
+$('#players').addEventListener('keydown', (e)=>{ if(e.key==='Enter' && (e.metaKey||e.ctrlKey)) run(); });
 
-    // 会尝试懒加载真实比分
-    function scoreBadgeHTML(m, colId){
-      const won = resolveWin(m);
-      const cls = (won === true) ? 'win' : (won === false) ? 'lose' : 'neutral';
-
-      // 如果后端已经给了字符串比分（推荐）
-      const scoreText = (m.score_text && String(m.score_text)) ||
-                        (typeof m.score === 'string' ? m.score : '');
-
-      const nodeId = `${colId}-${m.match_id}-score`;
-
-      if (scoreText) return `<span id="${nodeId}" class="score ${cls}">Score: ${scoreText}</span>`;
-
-      // 没有真实比分：先放 Win/Loss，再异步查询真实比分并更新
-      setTimeout(()=> lazyFetchScore(m.match_id, nodeId, cls), 0);
-      if (won === true)  return `<span id="${nodeId}" class="score ${cls}">Win</span>`;
-      if (won === false) return `<span id="${nodeId}" class="score ${cls}">Loss</span>`;
-      return `<span id="${nodeId}" class="score neutral">Score: -</span>`;
-    }
-
-    async function lazyFetchScore(matchId, nodeId, cls){
-      try{
-        const r = await fetch(`/match/score?match_id=${encodeURIComponent(matchId)}`);
-        if(!r.ok) return;
-        const j = await r.json();
-        if(j?.score_text){
-          const el = document.getElementById(nodeId);
-          if(el) el.outerHTML = `<span id="${nodeId}" class="score ${cls}">Score: ${j.score_text}</span>`;
-        }
-      }catch{}
-    }
-
-    function chip(label, value){ return `<span class="chip"><b>${label}</b>: ${value}</span>`; }
-
-    function playerHeader(nickname, profileUrl, count){
-      return `
-        <div class="p-head">
-          <div class="p-title"><a href="${profileUrl}" target="_blank" rel="noopener noreferrer">${nickname}</a></div>
-          <div class="small">${count>0 ? `最近 ${count} 场` : '最近 0 场'}</div>
-        </div>
-      `;
-    }
-
-    function matchBlock(m, colId, tzOffset){
-      const idLink = `<a href="${m.room_url}" target="_blank" rel="noopener noreferrer">${m.match_id}</a>`;
-      const map = m.map || '-';
-      // 优先：每场的 tz_offset / 每列（玩家）的 tz_offset；最终回退浏览器本地
-      const tz = (typeof m.tz_offset_minutes === 'number') ? m.tz_offset_minutes : tzOffset;
-      const when = tsToLocalString(m.started_at, tz);
-
-      return `
-        <div class="match">
-          <div class="m-line">
-            <span class="when">${when ? when + ' · ' : ''}</span>
-            <span>Match: ${idLink}</span>
-            <span>| Map: ${map}</span>
-            <span>| ${scoreBadgeHTML(m, colId)}</span>
-          </div>
-          <div class="stats">
-            ${chip('Kills', m.player?.kills ?? 0)}
-            ${chip('Deaths', m.player?.deaths ?? 0)}
-            ${chip('Assists', m.player?.assists ?? 0)}
-            ${chip('ADR', (m.player?.adr ?? 0))}
-            ${chip('HS%', (m.player?.hs ?? 0))}
-            ${chip('K/D', (m.player?.kd ?? 0))}
-            ${chip('K/R', (m.player?.kr ?? 0))}
-            ${chip('Rating', (m.player?.rating_hltv2_like ?? 0))}
-          </div>
-        </div>
-      `;
-    }
-
-    async function fetchJSON(url){
-      const r = await fetch(url);
-      if(!r.ok) throw new Error(await r.text());
-      return r.json();
-    }
-
-    async function loadOne(nickname, limit){
-      const player = await fetchJSON(`/player?name=${encodeURIComponent(nickname)}`);
-      // 期望后端把玩家时区偏移（分钟）放在 tz_offset_minutes。没有的话前端会自动回退。
-      const tz = (typeof player.tz_offset_minutes === 'number') ? player.tz_offset_minutes : undefined;
-
-      if(!player.found){
-        return { nickname, profile_url: `https://www.faceit.com/en/players/${encodeURIComponent(nickname)}`, matches: [], notFound: true, tz };
-      }
-      const ms = await fetchJSON(`/matches/with_stats?player_id=${player.player_id}&limit=${limit}`);
-      return { nickname: player.nickname, profile_url: player.profile_url, matches: ms, notFound: false, tz };
-    }
-
-    function renderColumns(results){
-      gridEl.innerHTML = results.map((res, idx) => {
-        const colId = `col${idx}`;
-        if(res.notFound){
-          return `
-            <div class="player-col">
-              ${playerHeader(res.nickname, res.profile_url, 0)}
-              <div class="err">未找到该玩家。</div>
-            </div>
-          `;
-        }
-        const blocks = (res.matches||[]).map(m => matchBlock(m, colId, res.tz)).join('');
-        return `
-          <div class="player-col" id="${colId}">
-            ${playerHeader(res.nickname, res.profile_url, res.matches?.length || 0)}
-            ${blocks || `<div class="muted">暂无最近比赛。</div>`}
-          </div>
-        `;
-      }).join('');
-    }
-
-    async function run(){
-      const names = parseNames(namesEl.value);
-      localStorage.setItem('pt_names', namesEl.value);
-
-      gridEl.innerHTML = '';
-      if(names.length === 0){
-        statusEl.textContent = '请输入至少一个 Faceit 昵称（逗号或换行分隔）。';
-        return;
-      }
-      statusEl.textContent = '加载中...';
-
-      try{
-        const limit = parseInt(limitEl.value, 10) || 5;
-        const jobs = names.map(n => loadOne(n, limit));
-        const res = await Promise.allSettled(jobs);
-
-        const ok = [];
-        const errs = [];
-        res.forEach((r,i)=>{
-          if(r.status === 'fulfilled') ok.push(r.value);
-          else errs.push({name: names[i], err: r.reason?.message || 'error'});
-        });
-
-        renderColumns(ok);
-
-        if(errs.length === 0){
-          statusEl.innerHTML = `<span class="ok">完成，共 ${ok.length} 位玩家。</span>`;
-        }else{
-          const msg = errs.map(e=>`${e.name}`).join(', ');
-          statusEl.innerHTML = `<span class="err">部分失败：${msg}</span>`;
-        }
-      }catch(e){
-        statusEl.innerHTML = `<span class="err">加载失败：${e?.message || e}</span>`;
-      }
-    }
-
-    btn.addEventListener('click', run);
-    namesEl.addEventListener('keydown', (e)=>{
-      if(e.key === 'Enter' && (e.ctrlKey || e.metaKey)) run();
-    });
-  </script>
+// 默认测试值（可删）
+document.addEventListener('DOMContentLoaded', ()=>{
+  const url = new URL(location.href);
+  const q = url.searchParams.get('q');
+  $('#players').value = q || 'donk666, niko, s1s1';
+  run();
+});
+</script>
 </body>
 </html>
