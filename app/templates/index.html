@@ -1,141 +1,240 @@
 <!doctype html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Pro Tracker 1.0</title>
   <style>
-    :root{--bg:#0d1117;--card:#111827;--muted:#94a3b8;--fg:#e5e7eb;--win:#16a34a;--lose:#ef4444;--accent:#22d3ee}
-    *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial}
-    .wrap{max-width:980px;margin:32px auto;padding:0 16px}
-    h1{margin:0 0 16px;font-size:30px;color:#a7f3d0}
-    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-    input,select,button,textarea{background:#0b1220;border:1px solid #1f2937;border-radius:8px;color:var(--fg);padding:10px 12px;font-size:14px;outline:none}
-    textarea{width:520px;min-height:44px;resize:vertical}
-    button{cursor:pointer}
-    .hint{color:var(--muted);font-size:13px;margin:8px 0 16px}
-    .card{background:var(--card);border:1px solid #1f2937;border-radius:12px;padding:14px;margin:14px 0}
-    .title{font-weight:600;margin-bottom:6px}
-    .mono{font-family:ui-monospace,Menlo,Monaco,Consolas,"Liberation Mono",monospace}
-    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#0b1220;border:1px solid #1f2937;margin-right:6px}
-    .score-win{color:var(--win);font-weight:700} .score-lose{color:var(--lose);font-weight:700}
-    a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+    :root{
+      --bg:#0f141a; --panel:#121a21; --text:#e7f5ef; --sub:#a7b3bd;
+      --green:#3ecf8e; --red:#ff5d5d; --blue:#5fbaff; --chip:#1a232c;
+      --card:#0f1820; --muted:#6b7680;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; background:var(--bg); color:var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, "Noto Sans", "Noto Sans CJK SC", sans-serif;
+      line-height:1.45;
+    }
+    .wrap{max-width:1100px; margin:28px auto; padding:0 16px;}
+    h1{margin:0 0 18px; font-size:34px; color:#b7f6d6; letter-spacing:1px}
+    .bar{
+      display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:12px;
+    }
+    textarea{
+      flex:1 1 640px; min-height:48px; max-height:120px; width:100%;
+      background:#0b1218; border:1px solid #203141; color:var(--text);
+      border-radius:10px; padding:12px 14px; outline:none; resize:vertical;
+    }
+    select,button{
+      height:40px; border-radius:10px; border:1px solid #203141;
+      background:#0b1218; color:var(--text); padding:0 12px; cursor:pointer;
+    }
+    button{background:#173042; border-color:#21465d}
+    button:hover{filter:brightness(1.1)}
+    .hint{color:var(--muted); font-size:13px; margin:6px 0 16px}
+
+    .player-card{
+      background:var(--panel); border:1px solid #1e2a35;
+      border-radius:14px; padding:14px; margin:14px 0;
+      box-shadow: 0 4px 24px rgba(0,0,0,.25);
+    }
+    .p-head{display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px}
+    .p-title{font-size:20px; font-weight:700}
+    .p-title a{color:var(--blue); text-decoration:none}
+    .p-title a:hover{text-decoration:underline}
+    .small{color:var(--muted); font-size:12px}
+
+    .match{
+      background:var(--card); border:1px solid #1b2732;
+      border-radius:12px; padding:12px; margin-top:10px;
+    }
+    .m-line{font-size:14px; display:flex; flex-wrap:wrap; gap:6px}
+    .m-line a{color:#cbe3ff; text-decoration:none}
+    .m-line a:hover{text-decoration:underline}
+    .score{padding:2px 8px; border-radius:999px; font-weight:700; background:var(--chip)}
+    .win{color:#0f2; background:rgba(0,255,128,.08); border:1px solid rgba(0,255,128,.2)}
+    .lose{color:#ff6b6b; background:rgba(255,0,0,.08); border:1px solid rgba(255,0,0,.2)}
+    .neutral{color:#c8ced6; background:rgba(255,255,255,.06); border:1px solid rgba(200,206,214,.15)}
+    .stats{margin-top:8px; display:flex; flex-wrap:wrap; gap:8px}
+    .chip{
+      background:var(--chip); border:1px solid #1f2a35; color:#d8e6ef;
+      padding:6px 10px; border-radius:999px; font-size:12px;
+    }
     .muted{color:var(--muted)}
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;margin-top:8px}
-    .badge{background:#0a0f1a;border:1px solid #1f2937;border-radius:8px;padding:6px 8px}
-    .section-title{font-size:18px;margin:8px 0}
+    .err{color:#ff8a8a; margin:8px 0}
+    .ok{color:#80ffaa}
+    .footer{color:#586674; font-size:12px; margin:28px 0 8px}
   </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>Pro Tracker 1.0</h1>
+  <div class="wrap">
+    <h1>Pro Tracker 1.0</h1>
 
-  <div class="row">
-    <label for="q">玩家（多个用逗号分隔）：</label>
-    <textarea id="q" placeholder="donk666, s1mple, ZywOo">{{ player or '' }}</textarea>
-    <label for="limit">每人条数：</label>
-    <select id="limit"><option>5</option><option selected>10</option><option>15</option><option>20</option></select>
-    <button id="go">刷新数据</button>
-  </div>
-  <div class="hint" id="hint">完成。</div>
-
-  <div id="result"></div>
-</div>
-
-<script>
-const $ = (s, el=document)=>el.querySelector(s);
-const result = $("#result"), q=$("#q"), limitSel=$("#limit"), hint=$("#hint"), goBtn=$("#go");
-
-(function init(){
-  const url = new URL(location.href);
-  const p = url.searchParams.get("player") || "donk666";
-  const l = url.searchParams.get("limit") || "10";
-  q.value = p; limitSel.value = l;
-  load(p, parseInt(l,10));
-})();
-
-goBtn.onclick = () => {
-  const p = q.value.trim() || "donk666";
-  const l = parseInt(limitSel.value,10) || 10;
-  const url = new URL(location.href);
-  url.searchParams.set("player", p); url.searchParams.set("limit", l);
-  history.replaceState(null, "", url.toString());
-  load(p, l);
-};
-
-async function load(input, limit){
-  hint.textContent = "加载中..."; result.innerHTML = "";
-  const names = splitNames(input);
-  try{
-    if(names.length <= 1){
-      const res = await fetch(`/page-data?nickname=${encodeURIComponent(names[0] || input)}&limit=${limit}`);
-      const data = await res.json();
-      renderOne(data);
-    }else{
-      const res = await fetch(`/page-data-multi?nicknames=${encodeURIComponent(names.join(","))}&limit=${limit}`);
-      const data = await res.json();
-      (data.items || []).forEach(renderOne);
-      hint.textContent = `完成，共 ${data.count || 0} 位玩家。`;
-      return;
-    }
-    hint.textContent = "完成。";
-  }catch(e){
-    console.error(e); hint.textContent = "加载失败，请稍后重试。";
-  }
-}
-
-function renderOne(block){
-  // 玩家头
-  const header = document.createElement("div");
-  header.className = "card";
-  header.innerHTML = `
-    <div class="section-title">
-      <a class="mono" href="${block.player.profile_url}" target="_blank" rel="noopener">${escapeHtml(block.player.nickname)}</a>
+    <div class="bar">
+      <textarea id="names" placeholder="输入多个 Faceit 昵称，逗号 或 换行 分隔。例如：donk666, niko"></textarea>
+      <label class="small" for="limit">每人条数：</label>
+      <select id="limit">
+        <option value="5">5</option>
+        <option value="10" selected>10</option>
+        <option value="15">15</option>
+        <option value="20">20</option>
+      </select>
+      <button id="btn">刷新数据</button>
     </div>
-    <div class="muted">最近 ${block.matches.length} 场。</div>`;
-  result.appendChild(header);
 
-  // 比赛卡
-  for(const m of block.matches){
-    const scoreText = m.score && typeof m.score === 'object'
-      ? `${m.score.faction1 ?? "-"} / ${m.score.faction2 ?? "-"}`
-      : (m.score || "-");
+    <div class="hint">支持多玩家查询；Match 可点进 Faceit 房间页下载 Demo；比分按胜负自动上色；Rating 为 HLTV 2.0-like 估算。</div>
+    <div id="status" class="small muted"></div>
 
-    const s = (m.player && m.player.stats) ? m.player.stats : {};
-    const rows = [
-      ["Kills", s["Kills"]], ["Deaths", s["Deaths"]], ["Assists", s["Assists"]],
-      ["ADR", s["ADR"]], ["HS%", s["Headshots %"]], ["K/D", s["K/D Ratio"]], ["K/R", s["K/R Ratio"]]
-    ];
-    if(m.rating_approx !== null && m.rating_approx !== undefined) rows.push(["Rating≈", m.rating_approx]);
+    <div id="list"></div>
 
-    const gridHtml = rows.map(([k,v]) => `<div class="badge"><span class="muted">${k}:</span> <b>${escapeHtml(v ?? "-")}</b></div>`).join("");
+    <div class="footer">© Pro Tracker 1.0</div>
+  </div>
 
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `
-      <div class="title">
-        <span class="muted">Match:</span>
-        <a class="mono" href="${m.room_url}" target="_blank" rel="noopener">${escapeHtml(m.match_id)}</a>
-        <span class="muted pill">Map:</span> <span class="mono">${escapeHtml(m.map || "-")}</span>
-        <span class="muted pill">Score:</span> <span class="${m.score_css} mono">${scoreText}</span>
-      </div>
-      <div class="grid">${gridHtml}</div>`;
-    result.appendChild(card);
-  }
-}
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+    const namesEl = $('#names');
+    const limitEl = $('#limit');
+    const listEl = $('#list');
+    const statusEl = $('#status');
+    const btn = $('#btn');
 
-function splitNames(s){
-  return (s || "")
-    .replace(/，/g, ",")
-    .replace(/\s+/g, ",")
-    .split(",")
-    .map(x => x.trim())
-    .filter(Boolean);
-}
+    // 记住最近一次输入
+    (function init(){
+      const cached = localStorage.getItem('pt_names');
+      if(cached) namesEl.value = cached;
+    })();
 
-function escapeHtml(x){
-  return String(x ?? "").replace(/[&<>"']/g, s => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[s]));
-}
-</script>
+    function parseNames(raw){
+      return Array.from(
+        new Set(
+          raw.split(/[\n,，]+/).map(s=>s.trim()).filter(Boolean)
+        )
+      );
+    }
+
+    function fmtScore(f1, f2, won){
+      const cls = won === true ? 'win' : won === false ? 'lose' : 'neutral';
+      return `<span class="score ${cls}">Score: ${f1} / ${f2}</span>`;
+    }
+
+    function chip(label, value){
+      return `<span class="chip"><b>${label}</b>: ${value}</span>`;
+    }
+
+    function playerCardHeader(nickname, profileUrl, count){
+      return `
+        <div class="p-head">
+          <div class="p-title"><a href="${profileUrl}" target="_blank" rel="noopener noreferrer">${nickname}</a></div>
+          <div class="small">${count>0 ? `最近 ${count} 场` : '最近 0 场'}</div>
+        </div>
+      `;
+    }
+
+    function matchBlock(m){
+      const idLink = `<a href="${m.room_url}" target="_blank" rel="noopener noreferrer">${m.match_id}</a>`;
+      const map = m.map || '-';
+      const scoreHTML = fmtScore(m.score.faction1, m.score.faction2, m.won);
+
+      const p = m.player || {};
+      return `
+        <div class="match">
+          <div class="m-line">
+            <span>Match: ${idLink}</span>
+            <span>| Map: ${map}</span>
+            <span>| ${scoreHTML}</span>
+          </div>
+          <div class="stats">
+            ${chip('Kills', p.kills ?? 0)}
+            ${chip('Deaths', p.deaths ?? 0)}
+            ${chip('Assists', p.assists ?? 0)}
+            ${chip('ADR', (p.adr ?? 0))}
+            ${chip('HS%', (p.hs ?? 0))}
+            ${chip('K/D', (p.kd ?? 0))}
+            ${chip('K/R', (p.kr ?? 0))}
+            ${chip('Rating', (p.rating_hltv2_like ?? 0))}
+          </div>
+        </div>
+      `;
+    }
+
+    async function fetchJSON(url){
+      const r = await fetch(url);
+      if(!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
+
+    async function loadOne(nickname, limit){
+      const player = await fetchJSON(`/player?name=${encodeURIComponent(nickname)}`);
+      if(!player.found){
+        return { nickname, profile_url: `https://www.faceit.com/en/players/${encodeURIComponent(nickname)}`, matches: [], notFound: true };
+      }
+      const ms = await fetchJSON(`/matches/with_stats?player_id=${player.player_id}&limit=${limit}`);
+      return { nickname: player.nickname, profile_url: player.profile_url, matches: ms, notFound: false };
+    }
+
+    function renderAll(results){
+      listEl.innerHTML = results.map(res => {
+        if(res.notFound){
+          return `
+            <div class="player-card">
+              ${playerCardHeader(res.nickname, res.profile_url, 0)}
+              <div class="err">未找到该玩家。</div>
+            </div>
+          `;
+        }
+        const blocks = (res.matches||[]).map(matchBlock).join('');
+        return `
+          <div class="player-card">
+            ${playerCardHeader(res.nickname, res.profile_url, res.matches?.length || 0)}
+            ${blocks || `<div class="muted">暂无最近比赛。</div>`}
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function run(){
+      const names = parseNames(namesEl.value);
+      localStorage.setItem('pt_names', namesEl.value);
+
+      listEl.innerHTML = '';
+      if(names.length === 0){
+        statusEl.textContent = '请输入至少一个 Faceit 昵称（逗号或换行分隔）。';
+        return;
+      }
+      statusEl.textContent = '加载中...';
+
+      try{
+        const limit = parseInt(limitEl.value, 10) || 5;
+        const jobs = names.map(n => loadOne(n, limit));
+        const res = await Promise.allSettled(jobs);
+
+        const ok = [];
+        const errs = [];
+        res.forEach((r,i)=>{
+          if(r.status === 'fulfilled') ok.push(r.value);
+          else errs.push({name: names[i], err: r.reason?.message || 'error'});
+        });
+
+        renderAll(ok);
+
+        if(errs.length === 0){
+          statusEl.innerHTML = `<span class="ok">完成，共 ${ok.length} 位玩家。</span>`;
+        }else{
+          const msg = errs.map(e=>`${e.name}`).join(', ');
+          statusEl.innerHTML = `<span class="err">部分失败：${msg}</span>`;
+        }
+      }catch(e){
+        statusEl.innerHTML = `<span class="err">加载失败：${e?.message || e}</span>`;
+      }
+    }
+
+    btn.addEventListener('click', run);
+    // 回车也触发
+    namesEl.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter' && (e.ctrlKey || e.metaKey)) run();
+    });
+  </script>
 </body>
 </html>
