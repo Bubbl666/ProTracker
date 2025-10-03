@@ -13,8 +13,6 @@
       --green:#28c57a;
       --red:#ff4d4f;
       --blue:#4da3ff;
-      --chip:#17212b;
-      --chip2:#0f1b24;
       --border:#1e2934;
     }
     *{box-sizing:border-box}
@@ -56,9 +54,8 @@
     }
     .card .hd .name{font-weight:800; letter-spacing:.2px}
     .card .hd a{color:var(--blue); text-decoration:none}
-    table{
-      width:100%; border-collapse:collapse; table-layout:fixed;
-    }
+
+    table{width:100%; border-collapse:collapse; table-layout:fixed}
     thead th{
       position:sticky; top:0; z-index:1;
       background:#0e1620; font-weight:600; color:var(--muted);
@@ -71,14 +68,11 @@
     }
     tbody tr:hover{background:#0e1822}
     .mono{font-variant-numeric:tabular-nums}
-    .pill{padding:2px 8px; border-radius:999px; background:var(--chip); display:inline-block}
-    .score.win{color:var(--green); font-weight:700}
-    .score.loss{color:var(--red); font-weight:700}
+    .score.win a{color:var(--green); font-weight:700; text-decoration:none}
+    .score.loss a{color:var(--red); font-weight:700; text-decoration:none}
     .muted{color:var(--muted)}
-    .link{color:var(--blue); text-decoration:none}
-    .nowrap{white-space:nowrap}
     .center{text-align:center}
-    .right{text-align:right}
+    .link{color:var(--blue); text-decoration:none}
   </style>
 </head>
 <body>
@@ -95,7 +89,7 @@
     <button id="refresh">刷新数据</button>
   </div>
 
-  <div class="hint">提示：Match 可点击 Faceit 比赛页下载 Demo；比分按胜负上色；时间为选手的本地时间。</div>
+  <div class="hint">提示：Score 为可点击链接（跳转 Faceit 房间页下载 Demo）；比分按胜负上色；时间为选手本地时间。</div>
 
   <div id="grid" class="grid"></div>
 
@@ -114,7 +108,7 @@
 
     async function fetchPlayer(name, limit){
       const url = `/player?name=${encodeURIComponent(name)}&limit=${limit}`;
-      const res = await fetch(url);
+      const res = await fetch(url, {cache:"no-store"});
       if(!res.ok) throw new Error("fetch failed");
       return res.json();
     }
@@ -127,7 +121,7 @@
       const col = document.createElement("div");
       col.className = "card";
 
-      // 头部
+      // header
       const hd = document.createElement("div");
       hd.className = "hd";
       hd.innerHTML = `
@@ -136,22 +130,15 @@
       `;
       col.appendChild(hd);
 
-      // 表格
+      // compact table: Date / Result / Score(link) / K
       const table = document.createElement("table");
       table.innerHTML = `
         <thead>
           <tr>
-            <th style="width:135px">Date</th>
-            <th>Match</th>
-            <th class="center" style="width:64px">Result</th>
-            <th class="center" style="width:72px">Score</th>
-            <th class="center" style="width:68px">K</th>
-            <th class="center" style="width:68px">A</th>
-            <th class="center" style="width:68px">D</th>
-            <th class="center" style="width:72px">K/D</th>
-            <th class="center" style="width:72px">ADR</th>
-            <th class="center" style="width:66px">HS%</th>
-            <th class="center" style="width:90px">Map</th>
+            <th style="width:160px">Date</th>
+            <th style="width:70px" class="center">Result</th>
+            <th style="width:90px" class="center">Score</th>
+            <th style="width:55px" class="center">K</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -160,7 +147,7 @@
 
       if(rows.length===0){
         const tr = document.createElement("tr");
-        tr.innerHTML = `<td colspan="11" class="muted center">最近 0 场。</td>`;
+        tr.innerHTML = `<td colspan="4" class="muted center">最近 0 场。</td>`;
         tbody.appendChild(tr);
       }else{
         rows.forEach(r=>{
@@ -168,20 +155,11 @@
           const tr = document.createElement("tr");
           tr.innerHTML = `
             <td class="mono">${r.date || ""}</td>
-            <td class="nowrap">
-              <a class="link" href="${r.match_url}" target="_blank" rel="noopener">
-                ${r.match_id?.slice(0,4)}…${r.match_id?.slice(-4)}
-              </a>
-            </td>
             <td class="center">${r.result || "-"}</td>
-            <td class="center score ${scoreClass}">${r.score || "-"}</td>
+            <td class="center score ${scoreClass}">
+              <a href="${r.match_url}" target="_blank" rel="noopener">${r.score || "-"}</a>
+            </td>
             <td class="center mono">${r.k ?? 0}</td>
-            <td class="center mono">${r.a ?? 0}</td>
-            <td class="center mono">${r.d ?? 0}</td>
-            <td class="center mono">${r.kd ?? 0}</td>
-            <td class="center mono">${r.adr ?? 0}</td>
-            <td class="center mono">${r.hs ?? 0}</td>
-            <td class="center mono">${r.map || "-"}</td>
           `;
           tbody.appendChild(tr);
         });
@@ -191,6 +169,9 @@
       return col;
     }
 
+    // 防止并发导致重复渲染：用批次令牌 + replaceChildren
+    let lastRun = 0;
+
     async function loadAll(){
       const names = inpPlayers.value
         .split(",")
@@ -199,18 +180,31 @@
 
       const limit = parseInt(selLimit.value,10) || 5;
 
-      grid.innerHTML = ""; // 清空（避免重复一行）
+      const runId = ++lastRun; // 本次批次号
+
+      // 渲染“加载中”
+      grid.replaceChildren();
+      const loading = document.createElement("div");
+      loading.className = "muted";
+      loading.textContent = "加载中…";
+      grid.appendChild(loading);
+
       if(names.length===0){
-        grid.innerHTML = `<div class="muted">请输入至少一个玩家昵称。</div>`;
+        loading.textContent = "请输入至少一个玩家昵称。";
         return;
       }
 
       const tasks = names.map(n=>fetchPlayer(n, limit).catch(()=>({player:n, profile_url:"#", matches:[]})));
       const all = await Promise.all(tasks);
-      all.forEach(data => grid.appendChild(playerCard(data)));
+
+      // 如果已经有更新的批次在跑，丢弃这批结果，避免重复显示
+      if(runId !== lastRun) return;
+
+      const columns = all.map(data => playerCard(data));
+      grid.replaceChildren(...columns);
     }
 
-    // 首次自动加载
+    // 首次加载（只跑一次）
     loadAll();
   </script>
 </body>
