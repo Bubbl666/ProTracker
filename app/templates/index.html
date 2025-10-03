@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Pro Tracker 1.0</title>
+  <style>
+    :root{--bg:#0d1117;--card:#111827;--muted:#94a3b8;--fg:#e5e7eb;--win:#16a34a;--lose:#ef4444;--accent:#22d3ee}
+    *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial}
+    .wrap{max-width:980px;margin:32px auto;padding:0 16px}
+    h1{margin:0 0 16px;font-size:30px;color:#a7f3d0}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    input,select,button,textarea{background:#0b1220;border:1px solid #1f2937;border-radius:8px;color:var(--fg);padding:10px 12px;font-size:14px;outline:none}
+    textarea{width:520px;min-height:44px;resize:vertical}
+    button{cursor:pointer}
+    .hint{color:var(--muted);font-size:13px;margin:8px 0 16px}
+    .card{background:var(--card);border:1px solid #1f2937;border-radius:12px;padding:14px;margin:14px 0}
+    .title{font-weight:600;margin-bottom:6px}
+    .mono{font-family:ui-monospace,Menlo,Monaco,Consolas,"Liberation Mono",monospace}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#0b1220;border:1px solid #1f2937;margin-right:6px}
+    .score-win{color:var(--win);font-weight:700} .score-lose{color:var(--lose);font-weight:700}
+    a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+    .muted{color:var(--muted)}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;margin-top:8px}
+    .badge{background:#0a0f1a;border:1px solid #1f2937;border-radius:8px;padding:6px 8px}
+    .section-title{font-size:18px;margin:8px 0}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Pro Tracker 1.0</h1>
+
+  <div class="row">
+    <label for="q">玩家（多个用逗号分隔）：</label>
+    <textarea id="q" placeholder="donk666, s1mple, ZywOo">{{ player or '' }}</textarea>
+    <label for="limit">每人条数：</label>
+    <select id="limit"><option>5</option><option selected>10</option><option>15</option><option>20</option></select>
+    <button id="go">刷新数据</button>
+  </div>
+  <div class="hint" id="hint">完成。</div>
+
+  <div id="result"></div>
+</div>
+
+<script>
+const $ = (s, el=document)=>el.querySelector(s);
+const result = $("#result"), q=$("#q"), limitSel=$("#limit"), hint=$("#hint"), goBtn=$("#go");
+
+(function init(){
+  const url = new URL(location.href);
+  const p = url.searchParams.get("player") || "donk666";
+  const l = url.searchParams.get("limit") || "10";
+  q.value = p; limitSel.value = l;
+  load(p, parseInt(l,10));
+})();
+
+goBtn.onclick = () => {
+  const p = q.value.trim() || "donk666";
+  const l = parseInt(limitSel.value,10) || 10;
+  const url = new URL(location.href);
+  url.searchParams.set("player", p); url.searchParams.set("limit", l);
+  history.replaceState(null, "", url.toString());
+  load(p, l);
+};
+
+async function load(input, limit){
+  hint.textContent = "加载中..."; result.innerHTML = "";
+  const names = splitNames(input);
+  try{
+    if(names.length <= 1){
+      const res = await fetch(`/page-data?nickname=${encodeURIComponent(names[0] || input)}&limit=${limit}`);
+      const data = await res.json();
+      renderOne(data);
+    }else{
+      const res = await fetch(`/page-data-multi?nicknames=${encodeURIComponent(names.join(","))}&limit=${limit}`);
+      const data = await res.json();
+      (data.items || []).forEach(renderOne);
+      hint.textContent = `完成，共 ${data.count || 0} 位玩家。`;
+      return;
+    }
+    hint.textContent = "完成。";
+  }catch(e){
+    console.error(e); hint.textContent = "加载失败，请稍后重试。";
+  }
+}
+
+function renderOne(block){
+  // 玩家头
+  const header = document.createElement("div");
+  header.className = "card";
+  header.innerHTML = `
+    <div class="section-title">
+      <a class="mono" href="${block.player.profile_url}" target="_blank" rel="noopener">${escapeHtml(block.player.nickname)}</a>
+    </div>
+    <div class="muted">最近 ${block.matches.length} 场。</div>`;
+  result.appendChild(header);
+
+  // 比赛卡
+  for(const m of block.matches){
+    const scoreText = m.score && typeof m.score === 'object'
+      ? `${m.score.faction1 ?? "-"} / ${m.score.faction2 ?? "-"}`
+      : (m.score || "-");
+
+    const s = (m.player && m.player.stats) ? m.player.stats : {};
+    const rows = [
+      ["Kills", s["Kills"]], ["Deaths", s["Deaths"]], ["Assists", s["Assists"]],
+      ["ADR", s["ADR"]], ["HS%", s["Headshots %"]], ["K/D", s["K/D Ratio"]], ["K/R", s["K/R Ratio"]]
+    ];
+    if(m.rating_approx !== null && m.rating_approx !== undefined) rows.push(["Rating≈", m.rating_approx]);
+
+    const gridHtml = rows.map(([k,v]) => `<div class="badge"><span class="muted">${k}:</span> <b>${escapeHtml(v ?? "-")}</b></div>`).join("");
+
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="title">
+        <span class="muted">Match:</span>
+        <a class="mono" href="${m.room_url}" target="_blank" rel="noopener">${escapeHtml(m.match_id)}</a>
+        <span class="muted pill">Map:</span> <span class="mono">${escapeHtml(m.map || "-")}</span>
+        <span class="muted pill">Score:</span> <span class="${m.score_css} mono">${scoreText}</span>
+      </div>
+      <div class="grid">${gridHtml}</div>`;
+    result.appendChild(card);
+  }
+}
+
+function splitNames(s){
+  return (s || "")
+    .replace(/，/g, ",")
+    .replace(/\s+/g, ",")
+    .split(",")
+    .map(x => x.trim())
+    .filter(Boolean);
+}
+
+function escapeHtml(x){
+  return String(x ?? "").replace(/[&<>"']/g, s => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[s]));
+}
+</script>
+</body>
+</html>
