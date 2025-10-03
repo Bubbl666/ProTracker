@@ -1,264 +1,169 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Pro Tracker 1.0</title>
-  <link rel="stylesheet" href="/static/main.css" />
   <style>
-    /* 轻量样式直接内联，便于你拷贝；也可移到 /static/main.css */
     :root{
-      --bg:#0f1418; --panel:#111a20; --muted:#8aa1b1; --text:#e7f0f7;
-      --green:#31d0a0; --red:#ff5d5d; --chip:#1b2730; --chip2:#172129;
-      --border:#1a242c;
+      --bg:#0f1419; --panel:#121821; --muted:#7d8b99; --fg:#e6f0ff;
+      --green:#22c55e; --red:#ef4444; --chip:#1b2430; --chip2:#0d121a;
+      --brand:#9ff8c1;
     }
-    html,body{background:var(--bg); color:var(--text); font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial;}
-    .wrap{max-width:1400px; margin:24px auto; padding:0 16px;}
-    h1{font-weight:700; font-size:24px; letter-spacing:.5px; margin-bottom:16px;}
-    .controls{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px;}
-    .input, select, button{
-      background:#0c1216; color:var(--text); border:1px solid var(--border); border-radius:8px; padding:10px 12px;
+    *{box-sizing:border-box;}
+    body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 system-ui,Segoe UI,Helvetica,Arial;}
+    header{padding:24px 20px 8px;max-width:1200px;margin:auto;}
+    h1{margin:0 0 12px;font-size:28px;color:var(--brand)}
+    .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .input,select,button{
+      background:#0b1016;border:1px solid #1f2a37;color:var(--fg);
+      padding:10px 12px;border-radius:10px;outline:none;
     }
-    .input{width:720px; max-width:100%;}
+    .input{flex:1;min-width:260px}
     button{cursor:pointer}
-    .hint{color:var(--muted); margin:8px 0 16px 0; font-size:12px}
-    .ok{color:#75e6bd}
-    .err{color:#ff8a8a}
+    .hint{color:var(--muted);margin-top:6px}
 
-    /* 栅格：每个玩家 = 一列 */
-    .grid{
-      display:grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap:16px;
-      align-items:start;
-    }
-    .col{
-      background:var(--panel);
-      border:1px solid var(--border);
-      border-radius:12px;
-      overflow:hidden;
-    }
-    .col .hd{
-      display:flex; justify-content:space-between; align-items:center;
-      padding:12px 14px; border-bottom:1px solid var(--border); background:#0f171d;
-    }
-    .nick{font-weight:700; font-size:16px}
-    .nick a{color:var(--text); text-decoration:none}
-    .nick a:hover{opacity:.85}
-    .sub{color:var(--muted); font-size:12px}
+    .grid{max-width:1200px;margin:16px auto 40px;display:grid;gap:12px}
+    /* 自适应横向多列（每列最小 320px） */
+    .grid{grid-template-columns:repeat(auto-fill,minmax(320px,1fr));}
 
-    /* 表格头在卡片内部出现一次（不是每行都重复） */
-    .tbl{width:100%; border-collapse:collapse; table-layout:fixed; font-variant-numeric:tabular-nums;}
-    .tbl thead th{
-      position:sticky; top:0; z-index:5;
-      background:#0f171d; border-bottom:1px solid var(--border);
-      color:var(--muted); font-weight:600; padding:8px 10px; text-align:left;
-      font-size:12px;
-    }
-    .tbl tbody td{padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:middle;}
-    .tbl tbody tr:last-child td{border-bottom:0}
-    .mut{color:var(--muted)}
-    .chip{background:var(--chip); padding:2px 8px; border-radius:999px; font-weight:700; font-size:12px; display:inline-block}
-    .win{color:var(--green)}
-    .loss{color:var(--red)}
-    .score{font-weight:700; padding:2px 6px; border-radius:6px; background:var(--chip2);}
-    .score.win{color:var(--green)}
-    .score.loss{color:var(--red)}
-    .map{opacity:.9}
-    .ka{color:#cde7ff}
-    .link{opacity:.9}
-    .link:hover{opacity:1}
-    .empty{padding:20px; color:var(--muted)}
-    .footer{margin:14px 0 0 0; color:var(--muted); font-size:12px}
-    .pill{border:1px solid var(--border); padding:0 6px; border-radius:999px; margin-left:6px}
+    .col{background:var(--panel);border:1px solid #1f2a37;border-radius:12px;overflow:hidden}
+    .col header{padding:12px 14px;background:#0d121a;border-bottom:1px solid #1f2a37}
+    .col header a{color:#9ad8ff;text-decoration:none}
+    .col header .meta{color:var(--muted);font-size:12px}
+
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px 10px;border-bottom:1px solid #1f2a37;white-space:nowrap}
+    th{color:#a9b8c6;text-align:left;font-weight:600}
+    td .chip{display:inline-block;background:var(--chip);padding:2px 8px;border-radius:999px;font-size:12px}
+    .win{color:var(--green)} .loss{color:var(--red)}
+    .score.win{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3)}
+    .score.loss{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3)}
+    .muted{color:var(--muted)}
+    .nowrap{white-space:nowrap}
   </style>
 </head>
 <body>
-<div class="wrap">
+<header>
   <h1>Pro Tracker 1.0</h1>
-
-  <div class="controls">
-    <textarea id="players" class="input" rows="1" placeholder="多个玩家名或ID，以逗号隔开，如：donk666, niko, s1mple"></textarea>
-    <label class="mut">每人条数：
-      <select id="limit">
-        <option>5</option><option>10</option><option>15</option>
-      </select>
-    </label>
+  <div class="toolbar">
+    <input id="players" class="input" placeholder="多个选手用逗号分隔，例如：donk666, niko, s1s1" />
+    <select id="limit">
+      <option value="5">每人 5 场</option>
+      <option value="10">每人 10 场</option>
+      <option value="15">每人 15 场</option>
+    </select>
+    <select id="tz">
+      <option value="Asia/Shanghai">Asia/Shanghai（北京时间）</option>
+      <option value="Europe/Moscow">Europe/Moscow</option>
+      <option value="Europe/Berlin">Europe/Berlin</option>
+      <option value="UTC">UTC</option>
+      <option value="America/New_York">America/New_York</option>
+    </select>
     <button id="go">刷新数据</button>
-    <span id="status" class="mut"></span>
   </div>
+  <div class="hint">提示：Match 可点击 Faceit 比赛页下载 Demo；比分按胜负上色；时间按所选时区显示。</div>
+</header>
 
-  <div class="hint">
-    支持多玩家分列；Match 链接直达 Faceit 房间页（下载 Demo）；比分按阵营自动着色；Rating 为简化 HLTV 2.0-like 估算。
-  </div>
-
-  <div id="grid" class="grid"></div>
-
-  <div class="footer">完成。<span id="count" class="pill">0 位玩家</span></div>
-</div>
+<main class="grid" id="grid"></main>
 
 <script>
-const $ = sel => document.querySelector(sel);
-const el = (tag, cls, html) => {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (html !== undefined) n.innerHTML = html;
-  return n;
-};
+const elPlayers = document.getElementById('players');
+const elLimit   = document.getElementById('limit');
+const elTZ      = document.getElementById('tz');
+const elGo      = document.getElementById('go');
+const elGrid    = document.getElementById('grid');
 
-async function fetchJSON(url){
-  const r = await fetch(url);
-  if(!r.ok) throw new Error(await r.text());
-  return await r.json();
+// 默认示例
+elPlayers.value = 'donk666, niko, s1s1';
+
+elGo.addEventListener('click', loadAll);
+window.addEventListener('load', loadAll);
+
+async function loadAll(){
+  const names = elPlayers.value.split(',').map(s => s.trim()).filter(Boolean);
+  const limit = elLimit.value;
+  const tz    = elTZ.value;
+  if(!names.length){ elGrid.innerHTML = ''; return; }
+
+  elGrid.innerHTML = ''; // 清空
+  const cards = await Promise.all(names.map(n => loadOne(n, limit, tz)));
+  cards.forEach(card => elGrid.appendChild(card));
 }
 
-/** 先拿 player 信息（拿 profile_url，也可用于时区） */
-async function getPlayer(raw){
-  const r = await fetchJSON(`/player?name=${encodeURIComponent(raw)}`);
-  return r;
-}
-
-/** 最近比赛 + 我们后端已经补充的 score_text / room_url / faction */
-async function getMatches(pid, limit){
-  return await fetchJSON(`/matches/with_stats?player_id=${encodeURIComponent(pid)}&limit=${limit}`);
-}
-
-/** 格式化时间（优先用浏览器本地时区；若你未来在 /player 返回 IANA tz，可在这里应用） */
-function fmtTime(ts){
-  if(!ts) return '—';
-  // Faceit返回的是秒
-  const d = new Date(Number(ts) * 1000);
-  return new Intl.DateTimeFormat(undefined, {
-    month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'
-  }).format(d);
-}
-
-function decideWinLoss(scoreText, faction){
-  // faction: 1/2 表示玩家所在阵营
-  if(!scoreText || !faction) return {cls:'', text:scoreText || '—'};
-  const m = scoreText.match(/(\d+)\s*\/\s*(\d+)/);
-  if(!m) return {cls:'', text:scoreText};
-  const a = Number(m[1]), b = Number(m[2]);
-  const win = (faction===1 ? a>b : b>a);
-  return {cls: win ? 'win' : 'loss', text: `${a} / ${b}`};
-}
-
-function row(match){
-  const tr = el('tr');
-  const started = fmtTime(match.started_at);
-  const scoreInfo = decideWinLoss(match.score, match.faction);
-
-  // 结果文字（WIN/LOSS）
-  let resultWord = '—';
-  if(scoreInfo.cls==='win') resultWord = 'WIN';
-  else if(scoreInfo.cls==='loss') resultWord = 'LOSS';
-
-  const p = match.player || {};
-  const k = p.kills ?? '—';
-  const a = p.assists ?? '—';
-  const d = p.deaths ?? '—';
-  const kd = p.kd ?? '—';
-  const adr = (p.adr!==undefined ? p.adr : '—');
-  const map = match.map ? match.map.replace(/^de_/, '') : '—';
-  const demo = match.room_url ? `<a class="link" href="${match.room_url}" target="_blank" title="Faceit 房间页">↗</a>` : '<span class="mut">—</span>';
-
-  tr.innerHTML = `
-    <td class="mut">${started}</td>
-    <td><span class="chip ${scoreInfo.cls}">${resultWord}</span></td>
-    <td><span class="score ${scoreInfo.cls}">${scoreInfo.text||'—'}</span></td>
-    <td class="ka">${k} / ${a} / ${d}</td>
-    <td>${kd}</td>
-    <td>${adr}</td>
-    <td class="map">${map}</td>
-    <td>${demo}</td>
+async function loadOne(name, limit, tz){
+  const card = document.createElement('section');
+  card.className = 'col';
+  card.innerHTML = `
+    <header>
+      <div><a id="p_${css(name)}" href="#" target="_blank">${escapeHTML(name)}</a></div>
+      <div class="meta">最近 <span id="c_${css(name)}">0</span> 场</div>
+    </header>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="nowrap">Date</th>
+            <th class="nowrap">Match</th>
+            <th class="nowrap">Result</th>
+            <th class="nowrap">Score</th>
+            <th class="nowrap">K/A/D</th>
+            <th class="nowrap">K/D</th>
+            <th class="nowrap">ADR</th>
+            <th class="nowrap">HS%</th>
+            <th class="nowrap">Map</th>
+          </tr>
+        </thead>
+        <tbody id="tb_${css(name)}">
+          <tr><td colspan="9" class="muted">加载中…</td></tr>
+        </tbody>
+      </table>
+    </div>
   `;
-  return tr;
-}
 
-function oneColumn(player, matches){
-  const card = el('div','col');
+  try{
+    const res = await fetch(`/player?name=${encodeURIComponent(name)}&limit=${limit}&tz=${encodeURIComponent(tz)}`);
+    const data = await res.json();
 
-  // 头
-  const hd = el('div','hd');
-  const nick = player?.nickname || 'Unknown';
-  const profile = player?.profile_url || null;
-  hd.append(
-    el('div','nick', profile ? `<a href="${profile}" target="_blank">${nick}</a>` : nick),
-    el('div','sub', `最近 ${matches.length} 场`)
-  );
-  card.append(hd);
+    const a = card.querySelector('#p_'+css(name));
+    a.href = data.profile_url || '#';
 
-  // 表格
-  const tbl = el('table','tbl');
-  tbl.innerHTML = `
-    <thead>
-      <tr>
-        <th style="width:92px">日期</th>
-        <th style="width:66px">结果</th>
-        <th style="width:86px">比分</th>
-        <th>K / A / D</th>
-        <th style="width:60px">K/D</th>
-        <th style="width:70px">ADR</th>
-        <th style="width:80px">地图</th>
-        <th style="width:46px">Demo</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  `;
-  const tb = tbl.querySelector('tbody');
+    const tb = card.querySelector('#tb_'+css(name));
+    tb.innerHTML = '';
+    (data.matches || []).forEach(row => {
+      const win = row.result === 'Win';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="nowrap">${escapeHTML(row.date || '')}</td>
+        <td class="nowrap"><a href="${row.match_url}" target="_blank">${escapeHTML(shortMatch(row.match_url))}</a></td>
+        <td class="nowrap ${win?'win':'loss'}">${row.result}</td>
+        <td class="nowrap"><span class="chip score ${win?'win':'loss'}">${escapeHTML(row.score)}</span></td>
+        <td class="nowrap">${row.k} / ${row.a} / ${row.d}</td>
+        <td>${row.kd}</td>
+        <td>${row.adr}</td>
+        <td>${row.hs}%</td>
+        <td class="nowrap">${escapeHTML(row.map || '-')}</td>
+      `;
+      tb.appendChild(tr);
+    });
 
-  if(!matches.length){
-    const empty = el('div','empty','最近 0 场。');
-    card.append(empty);
-  }else{
-    matches.forEach(m => tb.append(row(m)));
-    card.append(tbl);
+    card.querySelector('#c_'+css(name)).textContent = (data.matches || []).length;
+  }catch(e){
+    const tb = card.querySelector('#tb_'+css(name));
+    tb.innerHTML = `<tr><td colspan="9" class="loss">加载失败</td></tr>`;
   }
+
   return card;
 }
 
-async function run(){
-  const status = $('#status');
-  const grid = $('#grid');
-  grid.innerHTML = '';
-  status.textContent = '加载中...';
-
-  const raw = $('#players').value.trim();
-  if(!raw){ status.textContent = '请输入玩家。'; return; }
-
-  const parts = raw.split(',').map(s=>s.trim()).filter(Boolean);
-  const limit = Number($('#limit').value);
-
-  let ok = 0;
-  for(const name of parts){
-    try{
-      const p = await getPlayer(name);
-      if(!p?.found || !p?.player_id){
-        grid.append( oneColumn({nickname:name}, []) );
-        continue;
-      }
-      const ms = await getMatches(p.player_id, limit);
-      grid.append( oneColumn(p, ms) );
-      ok++;
-    }catch(e){
-      grid.append( oneColumn({nickname:name}, []) );
-    }
-  }
-  $('#count').textContent = `${ok} 位玩家`;
-  status.textContent = ok ? '完成。' : '加载失败，请稍后重试。';
+function css(s){ return s.replace(/[^a-z0-9_]/ig,'_');}
+function escapeHTML(s){ return (s??'').toString().replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+function shortMatch(url){
+  // https://www.faceit.com/en/cs2/room/{match_id} -> 只显示 match_id 后 6 位
+  const id = (url||'').split('/').pop() || '';
+  if(!id) return 'Match';
+  return '...' + id.slice(-8);
 }
-
-$('#go').addEventListener('click', run);
-// 回车快捷
-$('#players').addEventListener('keydown', (e)=>{ if(e.key==='Enter' && (e.metaKey||e.ctrlKey)) run(); });
-
-// 默认测试值（可删）
-document.addEventListener('DOMContentLoaded', ()=>{
-  const url = new URL(location.href);
-  const q = url.searchParams.get('q');
-  $('#players').value = q || 'donk666, niko, s1s1';
-  run();
-});
 </script>
 </body>
 </html>
