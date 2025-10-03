@@ -1,4 +1,97 @@
 # app/main.py
+# ==== 新增：顶部导入 ====
+import time
+from typing import Optional, Dict, Any
+
+# ==== 新增：简单的内存缓存，避免对 /players/{id} 频繁打点 ====
+_PROFILE_TTL = 3600  # 1h
+_profile_cache: Dict[str, Dict[str, Any]] = {}  # player_id -> {"data":..., "ts":...}
+
+async def fetch_player_profile(session, player_id: str) -> Optional[Dict[str, Any]]:
+    now = time.time()
+    hit = _profile_cache.get(player_id)
+    if hit and now - hit["ts"] < _PROFILE_TTL:
+        return hit["data"]
+
+    url = f"{FACEIT_API}/players/{player_id}"
+    try:
+        async with session.get(url, headers=faceit_headers(), timeout=20) as r:
+            if r.status != 200:
+                return None
+            raw = await r.json()
+    except Exception:
+        return None
+
+    data = {
+        "player_id": raw.get("player_id"),
+        "nickname": raw.get("nickname"),
+        "avatar": (raw.get("avatar") or ""),
+        "skill_level": (raw.get("games", {})
+                          .get("cs2", {})
+                          .get("skill_level") or raw.get("games", {})
+                          .get("csgo", {})
+                          .get("skill_level") or None),
+        "game_player_id": (raw.get("games", {})
+                            .get("cs2", {})
+                            .get("game_player_id")
+                           or raw.get("games", {})
+                            .get("csgo", {})
+                            .get("game_player_id")),
+        "faceit_url": (raw.get("faceit_url") or "").replace("{lang}", "en"),
+    }
+    _profile_cache[player_id] = {"data": data, "ts": now}
+    return data
+
+# ==== 修改：把队伍里每个玩家补全资料（可选） ====
+async def _enrich_team_players(session, team: Dict[str, Any], enrich: bool):
+    """team: {'team_id','nickname','players':[{'player_id','nickname',...}] }"""
+    if not enrich:
+        # 填上兼容字段，但不额外请求
+        for p in team.get("players", []):
+            p.setdefault("avatar", "")
+            p.setdefault("skill_level", None)
+            p.setdefault("game_player_id", None)
+            p.setdefault("faceit_url", None)
+        return
+
+    # 并发拉去资料（注意：人数多时会增大延迟&调用量）
+    tasks = []
+    for p in team.get("players", []):
+        tasks.append(fetch_player_profile(session, p["player_id"]))
+    profs = await asyncio.gather(*tasks, return_exceptions=True)
+
+    for p, prof in zip(team.get("players", []), profs):
+        if isinstance(prof, dict) and prof.get("player_id"):
+            p["avatar"] = prof.get("avatar") or ""
+            p["skill_level"] = prof.get("skill_level")
+            p["game_player_id"] = prof.get("game_player_id")
+            p["faceit_url"] = prof.get("faceit_url")
+        else:
+            p.setdefault("avatar", "")
+            p.setdefault("skill_level", None)
+            p.setdefault("game_player_id", None)
+            p.setdefault("faceit_url", None)
+
+# ==== 修改：在拼装比赛数据时调用上面的补全 ====
+@app.get("/matches/with_stats")
+async def matches_with_stats(
+    player_id: str = Query(..., description="Faceit player_id"),
+    limit: int = Query(5, ge=1, le=20),
+    game: str = Query("cs2"),
+    enrich: int = Query(0, description="为队友/对手补全头像和段位，1=开启")
+):
+    async with aiohttp.ClientSession() as session:
+        # ...（原先你的拉取历史&stats代码）...
+
+        # 假设最后得到 match_dict，里面有 teams 两个元素，每个元素是 team dict
+        # 在返回之前补全队伍成员信息：
+        for m in matches:
+            teams = m.get("teams") or []
+            for t in teams:
+                await _enrich_team_players(session, t, enrich=bool(enrich))
+
+        return matches
+
 from __future__ import annotations
 
 import os
