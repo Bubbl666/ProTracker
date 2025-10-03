@@ -1,155 +1,244 @@
 <!doctype html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Pro Tracker 1.0</title>
-  <style>
-    :root{
-      --bg:#0d1117; --card:#111827; --muted:#94a3b8; --fg:#e5e7eb;
-      --win:#16a34a; --lose:#ef4444; --accent:#22d3ee;
-    }
-    *{box-sizing:border-box}
-    html,body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial}
-    .wrap{max-width:980px;margin:32px auto;padding:0 16px}
-    h1{margin:0 0 16px;font-size:30px;color:#a7f3d0}
-    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-    input,select,button{
-      background:#0b1220;border:1px solid #1f2937;border-radius:8px;color:var(--fg);
-      padding:10px 12px;font-size:14px;outline:none
-    }
-    button{cursor:pointer}
-    .hint{color:var(--muted);font-size:13px;margin:8px 0 16px}
-    .card{
-      background:var(--card);border:1px solid #1f2937;border-radius:12px;padding:14px 14px;margin:14px 0
-    }
-    .title{font-weight:600;margin-bottom:6px}
-    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace}
-    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#0b1220;border:1px solid #1f2937;margin-right:6px}
-    .score-win{color:var(--win);font-weight:700}
-    .score-lose{color:var(--lose);font-weight:700}
-    a{color:var(--accent);text-decoration:none}
-    a:hover{text-decoration:underline}
-    .muted{color:var(--muted)}
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;margin-top:8px}
-    .badge{background:#0a0f1a;border:1px solid #1f2937;border-radius:8px;padding:6px 8px}
-  </style>
+  <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-<div class="wrap">
-  <h1>Pro Tracker 1.0</h1>
+  <div class="container">
+    <h1 class="title">Pro Tracker <span>1.0</span></h1>
 
-  <div class="row">
-    <label for="q">玩家（昵称或id）：</label>
-    <input id="q" placeholder="donk666" value="{{ player or '' }}"/>
-    <label for="limit">每人条数：</label>
-    <select id="limit">
-      <option>5</option><option>10</option><option>15</option><option>20</option>
-    </select>
-    <button id="go">刷新数据</button>
-  </div>
-  <div class="hint" id="hint">完成。</div>
+    <div class="controls">
+      <label class="label">玩家（多个用逗号分隔）：</label>
+      <textarea id="players" placeholder="例如：donk666, niko" rows="2"></textarea>
 
-  <div id="result"></div>
-</div>
-
-<script>
-const $ = (s, el=document)=>el.querySelector(s);
-const result = $("#result");
-const q = $("#q");
-const limitSel = $("#limit");
-const hint = $("#hint");
-const goBtn = $("#go");
-
-// 初始化下拉
-(function(){
-  const url = new URL(location.href);
-  const p = url.searchParams.get("player") || "donk666";
-  const l = url.searchParams.get("limit") || "10";
-  q.value = p;
-  limitSel.value = l;
-  load(p, parseInt(l,10));
-})();
-
-goBtn.onclick = () => {
-  const p = q.value.trim() || "donk666";
-  const l = parseInt(limitSel.value,10) || 10;
-  const url = new URL(location.href);
-  url.searchParams.set("player", p);
-  url.searchParams.set("limit", l);
-  history.replaceState(null, "", url.toString());
-  load(p, l);
-};
-
-async function load(player, limit){
-  hint.textContent = "加载中...";
-  result.innerHTML = "";
-  try{
-    const res = await fetch(`/page-data?nickname=${encodeURIComponent(player)}&limit=${limit}`);
-    const data = await res.json();
-
-    // Header：玩家名 + 主页链接（去掉原来的 player_id 展示）
-    const header = document.createElement("div");
-    header.className = "card";
-    header.innerHTML = `
-      <div class="title">
-        <a class="mono" href="${data.player.profile_url}" target="_blank" rel="noopener">${escapeHtml(data.player.nickname)}</a>
-      </div>
-      <div class="muted">共显示最近 ${data.matches.length} 场。</div>
-    `;
-    result.appendChild(header);
-
-    // 比赛卡片
-    for(const m of data.matches){
-      const scoreText = m.score && typeof m.score === 'object'
-        ? `${m.score.faction1 ?? "-"} / ${m.score.faction2 ?? "-"}`
-        : (m.score || "-");
-
-      const stats = (m.player && m.player.stats) ? m.player.stats : {};
-      const rows = [
-        ["Kills", stats["Kills"]],
-        ["Deaths", stats["Deaths"]],
-        ["Assists", stats["Assists"]],
-        ["ADR", stats["ADR"]],
-        ["HS%", stats["Headshots %"]],
-        ["K/D", stats["K/D Ratio"]],
-        ["K/R", stats["K/R Ratio"]],
-      ];
-      // 近似 Rating
-      if (m.rating_approx !== null && m.rating_approx !== undefined){
-        rows.push(["Rating≈", m.rating_approx]);
-      }
-
-      const gridHtml = rows.map(([k,v]) => `
-        <div class="badge"><span class="muted">${k}:</span> <b>${escapeHtml(v ?? "-")}</b></div>
-      `).join("");
-
-      const card = document.createElement("div");
-      card.className = "card";
-      card.innerHTML = `
-        <div class="title">
-          <span class="muted">Match:</span>
-          <a class="mono" href="${m.room_url}" target="_blank" rel="noopener">${escapeHtml(m.match_id)}</a>
-          <span class="muted pill">Map:</span> <span class="mono">${escapeHtml(m.map || "-")}</span>
-          <span class="muted pill">Score:</span> <span class="${m.score_css} mono">${scoreText}</span>
+      <div class="row">
+        <button id="refreshBtn">刷新数据</button>
+        <div class="limit">
+          <label>每人条数：</label>
+          <select id="limit">
+            <option>5</option>
+            <option selected>10</option>
+            <option>15</option>
+          </select>
         </div>
-        <div class="grid">${gridHtml}</div>
-      `;
-      result.appendChild(card);
+      </div>
+      <div id="hint" class="hint"></div>
+    </div>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+    const resultEl = $("#result");
+    const hintEl = $("#hint");
+    const refreshBtn = $("#refreshBtn");
+
+    // —— 辅助：从 stats 中取数（字符串或数字都能处理）
+    function getNum(obj, key, def = 0) {
+      if (!obj || typeof obj !== "object") return def;
+      let v = obj[key];
+      if (v === undefined || v === null || v === "") return def;
+      if (typeof v === "number") return v;
+      // 去掉可能存在的百分号
+      if (typeof v === "string") {
+        v = v.replace("%", "").trim();
+        const n = Number(v);
+        return Number.isFinite(n) ? n : def;
+      }
+      return def;
     }
 
-    hint.textContent = "完成。";
-  }catch(err){
-    console.error(err);
-    hint.textContent = "加载失败，请稍后重试。";
-  }
-}
+    // —— 近似 HLTV 2.0 计算（不依赖额外字段，基于 KPR / Survival / ADR）
+    function computeHLTV2Approx(stats) {
+      const kpr = getNum(stats, "K/R Ratio", 0);     // kills per round
+      const kills = getNum(stats, "Kills", 0);
+      const deaths = getNum(stats, "Deaths", 0);
+      const adr = getNum(stats, "ADR", 0);
 
-function escapeHtml(x){
-  return String(x ?? "").replace(/[&<>"']/g, s => ({
-    "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
-  }[s]));
-}
-</script>
+      // 由 KPR ≈ Kills/Rounds 推回合数
+      const rounds = (kpr > 0) ? (kills / kpr) : (kills + deaths) || 1;
+      const survival = Math.max(0, Math.min(1, (rounds - deaths) / rounds));
+
+      // HLTV 2.0 的思想：标准化后取平均（简化近似）
+      const rating =
+        ( (kpr / 0.679) + (survival / 0.317) + (adr / 85.0) ) / 3.0;
+
+      return Number(rating.toFixed(2));
+    }
+
+    // —— 生成 Faceit 链接
+    const faceitProfileUrl = (nickname) =>
+      `https://www.faceit.com/en/players/${encodeURIComponent(nickname)}`;
+    const faceitMatchUrl = (matchId) =>
+      `https://www.faceit.com/en/cs2/room/${encodeURIComponent(matchId)}`;
+
+    // —— 把 score 用绿色(赢)/红色(输)展示
+    function scoreBadge(text, isWin) {
+      return `<span class="score ${isWin ? "win" : "lose"}">${text}</span>`;
+    }
+
+    // —— 渲染 1 场比赛
+    function renderMatchCard(playerNick, match, playerStats) {
+      // 1) 标题行：Match 链接 + 地图 + 比分（绿色/红色）
+      const matchId = match.match_id;
+      const mapName = match.map ?? "-";
+      // 从返回结构里取赢输：优先用 player.stats.Result（你的示例里就是这个）
+      const resultFlag = getNum(playerStats, "Result", 0); // 1=win, 0=lose
+      const isWin = resultFlag === 1;
+
+      // 比分 label：示例数据有两种：字符串 "13 / 10"，或者对象 {faction1:1,faction2:0}
+      let scoreLabel = "- : -";
+      if (typeof match.score === "string") {
+        scoreLabel = match.score;
+      } else if (match.score && (match.score.faction1 !== undefined)) {
+        scoreLabel = `${match.score.faction1} / ${match.score.faction2}`;
+      }
+
+      const title = `
+        <div class="match-title">
+          <div class="left">
+            <a class="match-link" href="${faceitMatchUrl(matchId)}" target="_blank" rel="noopener">
+              Match: ${matchId}
+            </a>
+            <span class="sep">|</span>
+            <span>Map: <b>${mapName}</b></span>
+            <span class="sep">|</span>
+            ${scoreBadge(`Score: ${scoreLabel}`, isWin)}
+          </div>
+          <div class="right">
+            <a class="demo-btn" href="${faceitMatchUrl(matchId)}" target="_blank" rel="noopener" title="打开 Faceit 比赛页下载 DEMO">
+              DEMO
+            </a>
+          </div>
+        </div>
+      `;
+
+      // 2) 主要统计 + 近似 HLTV 2.0
+      const kills = getNum(playerStats, "Kills");
+      const deaths = getNum(playerStats, "Deaths");
+      const assists = getNum(playerStats, "Assists");
+      const adr = getNum(playerStats, "ADR");
+      const hs = getNum(playerStats, "Headshots %");
+      const kd = getNum(playerStats, "K/D Ratio");
+      const kr = getNum(playerStats, "K/R Ratio");
+      const rating = computeHLTV2Approx(playerStats);
+
+      const stats = `
+        <div class="stats">
+          <div class="stat"><span>Kills:</span> <b>${kills}</b></div>
+          <div class="stat"><span>Deaths:</span> <b>${deaths}</b></div>
+          <div class="stat"><span>Assists:</span> <b>${assists}</b></div>
+          <div class="stat"><span>ADR:</span> <b>${adr}</b></div>
+          <div class="stat"><span>HS%:</span> <b>${hs}%</b></div>
+          <div class="stat"><span>K/D:</span> <b>${kd}</b></div>
+          <div class="stat"><span>K/R:</span> <b>${kr}</b></div>
+          <div class="stat rating"><span>Rating(≈HLTV2.0):</span> <b>${rating}</b></div>
+        </div>
+      `;
+
+      return `<div class="card">${title}${stats}</div>`;
+    }
+
+    // —— 渲染单个玩家的区块
+    function renderPlayerBlock(playerInfo, matches) {
+      const nickname = playerInfo.nickname;
+      const profile = faceitProfileUrl(nickname);
+
+      let html = `
+        <div class="player">
+          <div class="player-header">
+            <a class="player-name" href="${profile}" target="_blank" rel="noopener">${nickname}</a>
+            <span class="player-sub">Faceit Profile</span>
+          </div>
+      `;
+
+      if (!Array.isArray(matches) || matches.length === 0) {
+        html += `<div class="empty">最近 0 场。</div></div>`;
+        return html;
+      }
+
+      for (const m of matches) {
+        const pstats = (m.player && m.player.stats) ? m.player.stats : (m.player?.raw || {});
+        html += renderMatchCard(nickname, m, pstats || {});
+      }
+
+      html += `</div>`;
+      return html;
+    }
+
+    async function fetchJSON(url) {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      return await res.json();
+    }
+
+    async function load() {
+      resultEl.innerHTML = "";
+      hintEl.textContent = "查询中…";
+
+      const raw = $("#players").value.trim();
+      const limit = Number($("#limit").value) || 5;
+      if (!raw) {
+        hintEl.textContent = "请输入玩家名（可多位，用逗号分隔）";
+        return;
+      }
+
+      const names = raw.split(",").map(s => s.trim()).filter(Boolean);
+      const blocks = [];
+      let okCount = 0;
+
+      for (const name of names) {
+        try {
+          // 先取 player_id
+          const p = await fetchJSON(`/player?name=${encodeURIComponent(name)}`);
+          if (!p || !p.found) {
+            blocks.push(`
+              <div class="player">
+                <div class="player-header">
+                  <span class="player-name">${name}</span>
+                </div>
+                <div class="empty">未找到该玩家。</div>
+              </div>
+            `);
+            continue;
+          }
+
+          // 再取比赛
+          const ms = await fetchJSON(`/matches/with_stats?player_id=${encodeURIComponent(p.player_id)}&limit=${limit}`);
+          blocks.push(renderPlayerBlock({ nickname: p.nickname }, ms || []));
+          okCount++;
+        } catch (e) {
+          blocks.push(`
+            <div class="player">
+              <div class="player-header">
+                <span class="player-name">${name}</span>
+              </div>
+              <div class="empty">拉取失败：${String(e.message || e)}</div>
+            </div>
+          `);
+        }
+      }
+
+      resultEl.innerHTML = blocks.join("");
+      hintEl.textContent = `完成，共 ${names.length} 位玩家。`;
+    }
+
+    refreshBtn.addEventListener("click", load);
+
+    // 默认填一个例子，方便你演示
+    document.addEventListener("DOMContentLoaded", () => {
+      const urlPlayers = new URLSearchParams(location.search).get("players");
+      if (urlPlayers) {
+        $("#players").value = urlPlayers;
+      } else {
+        $("#players").value = "donk666";
+      }
+      load();
+    });
+  </script>
 </body>
 </html>
