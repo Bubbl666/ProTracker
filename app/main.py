@@ -1,276 +1,245 @@
 from __future__ import annotations
 
-import os
-from datetime import datetime
+import math
+import pytz
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
-from fastapi import FastAPI, Request, Query
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
-from zoneinfo import ZoneInfo
-
-# -----------------------------
-# Config
-# -----------------------------
-FACEIT_API = "https://open.faceit.com/data/v4"
-API_KEY = os.getenv("FACEIT_API_KEY", "")
-HEADERS = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}
 
 app = FastAPI(title="Pro Tracker 1.0", version="0.1.1")
 
-# 静态 & 模板
+# 静态资源（如果有）
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
-# 常见国家 → 时区（玩家本地时间用此；未命中回退 UTC）
-COUNTRY_TZ: Dict[str, str] = {
-    # 欧洲
-    "RU": "Europe/Moscow", "UA": "Europe/Kyiv", "PL": "Europe/Warsaw",
-    "DE": "Europe/Berlin", "FR": "Europe/Paris", "ES": "Europe/Madrid",
-    "IT": "Europe/Rome", "SE": "Europe/Stockholm", "NO": "Europe/Oslo",
-    "FI": "Europe/Helsinki", "DK": "Europe/Copenhagen", "CZ": "Europe/Prague",
-    "SK": "Europe/Bratislava", "HU": "Europe/Budapest", "RO": "Europe/Bucharest",
-    "BG": "Europe/Sofia", "GR": "Europe/Athens", "NL": "Europe/Amsterdam",
-    "BE": "Europe/Brussels", "PT": "Europe/Lisbon", "IE": "Europe/Dublin",
-    "GB": "Europe/London", "LT": "Europe/Vilnius", "LV": "Europe/Riga",
-    "EE": "Europe/Tallinn", "IS": "Atlantic/Reykjavik", "CH": "Europe/Zurich",
-    "AT": "Europe/Vienna", "BA": "Europe/Sarajevo", "RS": "Europe/Belgrade",
-    "HR": "Europe/Zagreb", "SI": "Europe/Ljubljana", "ME": "Europe/Podgorica",
-    "MK": "Europe/Skopje", "AL": "Europe/Tirane", "TR": "Europe/Istanbul",
-    # 美洲
-    "US": "America/New_York", "CA": "America/Toronto", "BR": "America/Sao_Paulo",
-    "AR": "America/Argentina/Buenos_Aires", "CL": "America/Santiago",
-    "MX": "America/Mexico_City",
-    # 亚太
-    "CN": "Asia/Shanghai", "TW": "Asia/Taipei", "HK": "Asia/Hong_Kong",
-    "JP": "Asia/Tokyo", "KR": "Asia/Seoul", "SG": "Asia/Singapore",
-    "MY": "Asia/Kuala_Lumpur", "TH": "Asia/Bangkok", "VN": "Asia/Ho_Chi_Minh",
-    "ID": "Asia/Jakarta", "PH": "Asia/Manila", "IN": "Asia/Kolkata",
-    "AU": "Australia/Sydney", "NZ": "Pacific/Auckland",
-    # 中东/非洲（常见 Faceit 地区）
-    "AE": "Asia/Dubai", "SA": "Asia/Riyadh", "EG": "Africa/Cairo", "ZA": "Africa/Johannesburg",
-}
 
+# =========================
+# 你项目里已有的底层函数（重要）
+# =========================
+# 说明：以下三个函数名，是为了“对接你已有的抓取逻辑”。
+# 如果你项目里函数名不同或集中在某个模块里（比如 faceit.py），只需要把实现替换为你原来可用的调用即可。
+# 这三件事必须能做：
+# 1) 通过昵称查到 player_id、nickname、country 等（国家码用于时区）
+# 2) 取最近 N 场比赛 + 带 Stats（你之前 /matches/with_stats 的原始结构）
+# 3) 构造 faceit 比赛链接与玩家主页链接（如果你已有工具函数，可直接用）
 
-# -----------------------------
-# Faceit API helpers
-# -----------------------------
-def faceit_get(url: str, params: Optional[dict] = None) -> Optional[dict]:
-    try:
-        r = requests.get(url, headers=HEADERS, params=params, timeout=20)
-        if r.status_code == 200:
-            return r.json()
-        return None
-    except Exception:
-        return None
-
-
-def fetch_player_profile(nickname: str) -> Optional[dict]:
-    """Players endpoint：拿到 player_id / country / faceit_url 等。"""
-    return faceit_get(f"{FACEIT_API}/players", params={"nickname": nickname})
-
-
-def fetch_player_id(nickname: str) -> Optional[str]:
-    p = fetch_player_profile(nickname)
-    return p.get("player_id") if p else None
-
-
-def fetch_matches(player_id: str, limit: int = 5) -> List[dict]:
-    """最近比赛（仅 cs2）。"""
-    data = faceit_get(f"{FACEIT_API}/players/{player_id}/history",
-                      params={"game": "cs2", "limit": limit})
-    return data.get("items", []) if data else []
-
-
-def parse_score_from_round(r0: dict) -> Tuple[int, int]:
-    """
-    兼容两种统计：
-    - r0["round_stats"]["Score"] 形如 "13 / 10"
-    - r0["teams"][i]["score"]
-    """
-    # 1) 优先 round_stats.Score
-    round_stats = r0.get("round_stats") or {}
-    score_str = round_stats.get("Score")
-    if isinstance(score_str, str) and "/" in score_str:
-        try:
-            a, b = score_str.replace(" ", "").split("/")
-            return int(a), int(b)
-        except Exception:
-            pass
-
-    # 2) 退化：teams[*].score
-    teams = r0.get("teams", [])
-    scores = []
-    for t in teams:
-        sc = t.get("score")
-        try:
-            scores.append(int(sc))
-        except Exception:
-            pass
-    if len(scores) >= 2:
-        return scores[0], scores[1]
-
-    return 0, 0
-
-
-def fetch_match_stats_for_player(match_id: str, player_id: str) -> Optional[dict]:
-    """
-    返回：
-    {
-      "score_a": 13, "score_b": 10, "player_side": 0/1,
-      "kills": int, "assists": int, "deaths": int,
-      "adr": float, "hs": int, "kd": float, "kr": float
-    }
-    """
-    data = faceit_get(f"{FACEIT_API}/matches/{match_id}/stats")
-    if not data:
-        return None
-
-    rounds = data.get("rounds") or []
-    if not rounds:
-        return None
-
-    r0 = rounds[0]
-    score_a, score_b = parse_score_from_round(r0)
-
-    # 找到玩家所在队，顺便抓玩家统计
-    player_stats: Dict[str, Any] = {}
-    player_side = None
-    for side_idx, team in enumerate(r0.get("teams", [])):
-        for p in team.get("players", []):
-            if p.get("player_id") == player_id:
-                s = p.get("player_stats", {}) or {}
-
-                def fget(name: str, cast=float, default=0):
-                    v = s.get(name, default)
-                    try:
-                        return cast(v)
-                    except Exception:
-                        return default
-
-                player_stats = {
-                    "kills": fget("Kills", int, 0),
-                    "deaths": fget("Deaths", int, 0),
-                    "assists": fget("Assists", int, 0),
-                    "adr": round(fget("ADR", float, 0.0), 1),
-                    "hs": fget("Headshots %", int, 0),
-                    "kd": round(fget("K/D Ratio", float, 0.0), 2),
-                    "kr": round(fget("K/R Ratio", float, 0.0), 2),
-                }
-                player_side = side_idx
-                break
-
-    if player_side is None:
-        # 找不到该玩家（极少数异常场景）
-        player_side = 0
-
-    return {
-        "score_a": score_a,
-        "score_b": score_b,
-        "player_side": player_side,
-        **player_stats,
-    }
-
-
-def faceit_match_url(match_id: str) -> str:
+def _faceit_match_url(match_id: str) -> str:
     return f"https://www.faceit.com/en/cs2/room/{match_id}"
 
-
-def faceit_player_url(nickname: str) -> str:
+def _faceit_profile_url(nickname: str) -> str:
     return f"https://www.faceit.com/en/players/{nickname}"
 
+def resolve_player_by_name(nickname: str) -> Dict[str, Any]:
+    """
+    需要返回：{ 'player_id': str, 'nickname': str, 'country': 'RU'(可无), ... }
+    这里默认调用你原有逻辑；如果你本地函数叫别的名，把下面替换成你的实现。
+    """
+    # 示例占位：你需要换成自己原有的 player 获取逻辑
+    # 下面这段请求只是示意，不会真的工作（Faceit开放API需要key）
+    # 建议：直接用你之前成功的“昵称->player_id”方法
+    raise NotImplementedError("请接入你原来的昵称解析函数：resolve_player_by_name")
 
-def get_player_tz_from_country(country_code: Optional[str]) -> ZoneInfo:
-    tz = COUNTRY_TZ.get((country_code or "").upper())
+def fetch_recent_matches_with_stats(player_id: str, limit: int = 5) -> Dict[str, Any]:
+    """
+    返回结构需要和你之前 /matches/with_stats 的原始 JSON 相同（你贴过的长 JSON）。
+    也就是包含：
+    - 'player': {...可选}
+    - 'matches': [ { 'match_id', 'score': {'faction1','faction2'}, 'teams':[...], 'started_at', 'finished_at', ... } ... ]
+    """
+    raise NotImplementedError("请接入你原来的近期比赛+统计的函数：fetch_recent_matches_with_stats")
+
+
+# =========================
+# 工具：国家 -> 时区（粗略）
+# =========================
+def tz_for_country(country_code: Optional[str]) -> timezone:
     try:
-        return ZoneInfo(tz) if tz else ZoneInfo("UTC")
+        if country_code:
+            zones = pytz.country_timezones.get(country_code.upper())
+            if zones:
+                return pytz.timezone(zones[0])
     except Exception:
-        return ZoneInfo("UTC")
+        pass
+    return pytz.utc
 
 
-def format_local_time(ts: Optional[int], tz: ZoneInfo) -> str:
-    if not ts:
-        return ""
-    return datetime.fromtimestamp(ts, tz).strftime("%m/%d/%Y, %I:%M %p")
+# =========================
+# 工具：安全取数
+# =========================
+def _num(x: Any, default: float = 0.0) -> float:
+    try:
+        if x in (None, "", "-"):
+            return default
+        return float(x)
+    except Exception:
+        return default
 
 
-# -----------------------------
-# FastAPI endpoints
-# -----------------------------
+# =========================
+# 工具：计算 HLTV 2.0-like rating
+# rating ≈ 0.0073 * ADR + 0.3591 * KPR + 0.5334 * (1 - DPR)
+# KPR: K/R Ratio；DPR ≈ Deaths / Rounds；Rounds≈Kills/KPR（用 KPR 推回合数）
+# =========================
+def compute_rating_like(stats: Dict[str, Any]) -> Optional[float]:
+    adr = _num(stats.get("ADR"))
+    kpr = _num(stats.get("K/R Ratio"))
+    kills = _num(stats.get("Kills"))
+    deaths = _num(stats.get("Deaths"))
+
+    if kpr <= 0 or kills <= 0:
+        # 兜底：用 K/D 估一个 DPR
+        kd = _num(stats.get("K/D Ratio"))
+        if kd > 0:
+            # K/D = kills/deaths -> 近似 DPR = 1/(1+KD) （只是兜底近似）
+            dpr = 1.0 / (1.0 + kd)
+        else:
+            dpr = 0.5
+    else:
+        rounds = max(1.0, kills / kpr)
+        dpr = min(1.0, deaths / rounds)
+
+    rating = 0.0073 * adr + 0.3591 * kpr + 0.5334 * (1.0 - dpr)
+    return round(rating, 2)
+
+
+# =========================
+# 工具：从原始JSON里解析“我方队、比分、KAD、是否五杀”等
+# =========================
+def parse_matches_payload(raw: Dict[str, Any], player_id: str, player_tz: timezone) -> List[Dict[str, Any]]:
+    matches_out: List[Dict[str, Any]] = []
+
+    for m in raw.get("matches", []):
+        match_id = m.get("match_id")
+        started_ts = m.get("started_at")
+        map_name = m.get("map") or "-"
+        score_obj = m.get("score") or {}
+        teams = m.get("teams", [])
+
+        # 1) 找到玩家在哪个队、并拿到个人stats
+        my_team_index = None
+        my_stats: Dict[str, Any] = {}
+        for idx, t in enumerate(teams):
+            for p in t.get("players", []):
+                if p.get("player_id") == player_id:
+                    my_team_index = idx
+                    my_stats = p.get("stats") or {}
+                    break
+            if my_team_index is not None:
+                break
+
+        # 如果找不到，跳过
+        if my_team_index is None:
+            continue
+
+        # 2) 组装比分和胜负
+        f1 = int(score_obj.get("faction1") or 0)
+        f2 = int(score_obj.get("faction2") or 0)
+        # 阵营 0->faction1，1->faction2
+        my_score = f1 if my_team_index == 0 else f2
+        opp_score = f2 if my_team_index == 0 else f1
+        win = my_score > opp_score
+        score_str = f"{my_score} / {opp_score}"
+
+        # 3) 本地时间格式
+        if started_ts:
+            dt_utc = datetime.fromtimestamp(int(started_ts), tz=timezone.utc)
+            dt_local = dt_utc.astimezone(player_tz)
+            date_str = dt_local.strftime("%m/%d/%Y, %I:%M %p")
+        else:
+            date_str = ""
+
+        # 4) K/A/D
+        kills = int(_num(my_stats.get("Kills")))
+        assists = int(_num(my_stats.get("Assists")))
+        deaths = int(_num(my_stats.get("Deaths")))
+        kad = f"{kills} / {assists} / {deaths}"
+
+        # 5) 是否五杀（Faceit统计里有 Penta Kills）
+        is_ace = int(_num(my_stats.get("Penta Kills"))) > 0
+
+        # 6) 估算 rating
+        rating = compute_rating_like(my_stats)
+
+        matches_out.append({
+            "match_id": match_id,
+            "match_url": _faceit_match_url(match_id),
+            "map": map_name,
+            "date": date_str,
+            "score": score_str,
+            "win": win,
+            "k": kills,
+            "a": assists,
+            "d": deaths,
+            "kad": kad,
+            "is_ace": is_ace,
+            "rating": rating if rating is not None else "-",
+        })
+
+    return matches_out
+
+
+# =========================
+# 视图：主页（模板）
+# =========================
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("index.html", {"request": request})
 
 
-@app.get("/player")
-def api_player(
-    name: str,
-    limit: int = 5
-):
-    """
-    按“玩家自己的当地时间”返回最近比赛。
-    """
-    profile = fetch_player_profile(name)
-    if not profile:
-        return {"player": name, "profile_url": faceit_player_url(name), "matches": []}
-
-    player_id = profile.get("player_id")
-    profile_url = profile.get("faceit_url") or faceit_player_url(name)
-    country = (profile.get("country") or "").upper()
-    tz = get_player_tz_from_country(country)
-
-    items = fetch_matches(player_id, limit)
-    rows: List[dict] = []
-
-    for m in items:
-        match_id = m.get("match_id")
-        started_at = m.get("started_at")
-        map_name = m.get("game_map") or "-"
-
-        stat = fetch_match_stats_for_player(match_id, player_id)
-        if not stat:
-            # 没拿到 stats，仍然显示基本信息（Score 置空）
-            rows.append({
-                "date": format_local_time(started_at, tz),
-                "match_id": match_id,
-                "match_url": faceit_match_url(match_id),
-                "result": "-",
-                "score": "-",
-                "k": 0, "a": 0, "d": 0, "kd": 0.0, "adr": 0.0, "hs": 0,
-                "map": map_name,
-                "win": False,
-            })
-            continue
-
-        sa, sb = stat["score_a"], stat["score_b"]
-        side = stat["player_side"]
-        # 玩家所在队的分数
-        my_score = sa if side == 0 else sb
-        op_score = sb if side == 0 else sa
-        win = my_score > op_score
-
-        rows.append({
-            "date": format_local_time(started_at, tz),
-            "match_id": match_id,
-            "match_url": faceit_match_url(match_id),
-            "result": "Win" if win else "Loss",
-            "score": f"{sa} / {sb}",
-            "k": stat["kills"], "a": stat["assists"], "d": stat["deaths"],
-            "kd": stat["kd"], "adr": stat["adr"], "hs": stat["hs"],
-            "map": map_name,
-            "win": win,
-        })
-
-    return {"player": name, "profile_url": profile_url, "matches": rows}
+# 兼容旧的 /version
+@app.get("/version")
+async def version_redirect():
+    return RedirectResponse(url="/health")
 
 
 @app.get("/health")
-def health():
+async def health():
     return {"ok": True, "service": "protracker", "version": "0.1.1"}
 
 
-@app.get("/version")
-def version_redirect():
-    return RedirectResponse(url="/health")
+# =========================
+# 多玩家列视图：前端通过 /player?name=xxx&limit=5
+# 返回统一结构：{ player, profile_url, matches:[{date, score, match_url, k/a/d, rating, is_ace}] }
+# =========================
+@app.get("/player")
+def player_view(
+    name: str = Query(..., description="玩家昵称"),
+    limit: int = Query(5, ge=1, le=20, description="每位玩家条数"),
+) -> JSONResponse:
+    try:
+        # 1) 解析玩家
+        info = resolve_player_by_name(name)
+        player_id = info.get("player_id")
+        nickname = info.get("nickname") or name
+        country = info.get("country")  # e.g. 'RU'
+        if not player_id:
+            raise HTTPException(404, f"player not found: {name}")
+
+        # 2) 取最近比赛+stats（用你原有的“已成功”的函数）
+        raw = fetch_recent_matches_with_stats(player_id, limit=limit)
+
+        # 3) 时区（按国家码粗略映射）
+        zone = tz_for_country(country)
+
+        # 4) 解析与补齐
+        matches = parse_matches_payload(raw, player_id=player_id, player_tz=zone)
+
+        out = {
+            "player": nickname,
+            "profile_url": _faceit_profile_url(nickname),
+            "matches": matches,
+        }
+        return JSONResponse(out)
+
+    except HTTPException:
+        raise
+    except NotImplementedError as e:
+        # 提示你替换接口实现
+        raise HTTPException(500, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"player route error: {e}")
