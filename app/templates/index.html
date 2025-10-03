@@ -17,17 +17,17 @@
     }
     *{box-sizing:border-box}
     body{
-      margin:0; padding:24px;
+      margin:0; padding:20px;
       background:var(--bg); color:var(--text);
       font:14px/1.5 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, PingFang SC, Noto Sans CJK, "Helvetica Neue", Arial;
     }
-    h1{margin:0 0 16px;font-weight:800;letter-spacing:.2px}
-    .row{display:flex; gap:12px; flex-wrap:wrap; align-items:center}
+    h1{margin:0 0 12px;font-weight:800;letter-spacing:.2px}
+    .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
     .input{
       flex:1 1 520px;
       display:flex; align-items:center; gap:8px;
       background:#0a1016; border:1px solid var(--border);
-      border-radius:10px; padding:10px 12px;
+      border-radius:10px; padding:8px 10px;
     }
     .input input{
       flex:1; background:transparent; border:none; color:var(--text);
@@ -35,22 +35,22 @@
     }
     select, button{
       background:#101721; border:1px solid var(--border); color:var(--text);
-      padding:8px 10px; border-radius:10px; font-size:14px; cursor:pointer;
+      padding:6px 10px; border-radius:10px; font-size:14px; cursor:pointer;
     }
     button:hover, select:hover{filter:brightness(1.05)}
-    .hint{margin:10px 0 14px; color:var(--muted); font-size:12px}
+    .hint{margin:8px 0 12px; color:var(--muted); font-size:12px}
 
     .grid{
       display:grid;
       grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-      gap:14px;
+      gap:8px; /* 更紧凑 */
     }
     .card{
-      background:var(--panel); border:1px solid var(--border); border-radius:12px; overflow:hidden;
+      background:var(--panel); border:1px solid var(--border); border-radius:10px; overflow:hidden;
     }
     .card .hd{
       display:flex; justify-content:space-between; align-items:center;
-      padding:12px 14px; background:#0a1016; border-bottom:1px solid var(--border);
+      padding:8px 10px; background:#0a1016; border-bottom:1px solid var(--border);
     }
     .card .hd .name{font-weight:800; letter-spacing:.2px}
     .card .hd a{color:var(--blue); text-decoration:none}
@@ -59,19 +59,20 @@
     thead th{
       position:sticky; top:0; z-index:1;
       background:#0e1620; font-weight:600; color:var(--muted);
-      padding:8px; border-bottom:1px solid var(--border);
+      padding:6px 8px; border-bottom:1px solid var(--border);
       font-size:12px;
+      text-align:left; /* 全部左对齐 */
     }
     tbody td{
-      padding:9px 8px; border-bottom:1px solid var(--border); font-size:13px;
+      padding:7px 8px; border-bottom:1px solid var(--border); font-size:13px;
       white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      text-align:left; /* 左对齐 */
     }
     tbody tr:hover{background:#0e1822}
     .mono{font-variant-numeric:tabular-nums}
     .score.win a{color:var(--green); font-weight:700; text-decoration:none}
     .score.loss a{color:var(--red); font-weight:700; text-decoration:none}
     .muted{color:var(--muted)}
-    .center{text-align:center}
     .link{color:var(--blue); text-decoration:none}
   </style>
 </head>
@@ -89,7 +90,7 @@
     <button id="refresh">刷新数据</button>
   </div>
 
-  <div class="hint">提示：Score 为可点击链接（跳转 Faceit 房间页下载 Demo）；比分按胜负上色；时间为选手本地时间。</div>
+  <div class="hint">提示：Score 为可点击链接（跳转 Faceit 房间页下载 Demo）；比分颜色表示胜负；时间为选手本地时间。</div>
 
   <div id="grid" class="grid"></div>
 
@@ -130,15 +131,15 @@
       `;
       col.appendChild(hd);
 
-      // compact table: Date / Result / Score(link) / K
+      // 紧凑表：Date / Score(链接) / K/A/D / Rating
       const table = document.createElement("table");
       table.innerHTML = `
         <thead>
           <tr>
-            <th style="width:160px">Date</th>
-            <th style="width:70px" class="center">Result</th>
-            <th style="width:90px" class="center">Score</th>
-            <th style="width:55px" class="center">K</th>
+            <th style="width:156px">Date</th>
+            <th style="width:84px">Score</th>
+            <th style="width:110px">K / A / D</th>
+            <th style="width:70px">Rating</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -147,19 +148,23 @@
 
       if(rows.length===0){
         const tr = document.createElement("tr");
-        tr.innerHTML = `<td colspan="4" class="muted center">最近 0 场。</td>`;
+        tr.innerHTML = `<td colspan="4" class="muted">最近 0 场。</td>`;
         tbody.appendChild(tr);
       }else{
         rows.forEach(r=>{
           const scoreClass = r.win ? "win" : "loss";
+          const k = r.k ?? 0;
+          const a = r.a ?? r.assists ?? 0;
+          const d = r.d ?? r.deaths ?? 0;
+          const rating = (r.rating ?? r.hltv_rating ?? "-");
           const tr = document.createElement("tr");
           tr.innerHTML = `
             <td class="mono">${r.date || ""}</td>
-            <td class="center">${r.result || "-"}</td>
-            <td class="center score ${scoreClass}">
+            <td class="score ${scoreClass}">
               <a href="${r.match_url}" target="_blank" rel="noopener">${r.score || "-"}</a>
             </td>
-            <td class="center mono">${r.k ?? 0}</td>
+            <td class="mono">${k} / ${a} / ${d}</td>
+            <td class="mono">${rating}</td>
           `;
           tbody.appendChild(tr);
         });
@@ -169,7 +174,7 @@
       return col;
     }
 
-    // 防止并发导致重复渲染：用批次令牌 + replaceChildren
+    // 防并发重复：批次令牌
     let lastRun = 0;
 
     async function loadAll(){
@@ -180,9 +185,8 @@
 
       const limit = parseInt(selLimit.value,10) || 5;
 
-      const runId = ++lastRun; // 本次批次号
+      const runId = ++lastRun;
 
-      // 渲染“加载中”
       grid.replaceChildren();
       const loading = document.createElement("div");
       loading.className = "muted";
@@ -197,14 +201,12 @@
       const tasks = names.map(n=>fetchPlayer(n, limit).catch(()=>({player:n, profile_url:"#", matches:[]})));
       const all = await Promise.all(tasks);
 
-      // 如果已经有更新的批次在跑，丢弃这批结果，避免重复显示
       if(runId !== lastRun) return;
 
       const columns = all.map(data => playerCard(data));
       grid.replaceChildren(...columns);
     }
 
-    // 首次加载（只跑一次）
     loadAll();
   </script>
 </body>
