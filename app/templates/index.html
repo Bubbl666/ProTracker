@@ -6,208 +6,97 @@
   <title>Pro Tracker 1.0</title>
   <style>
     :root{
-      --bg:#0f141a;
-      --panel:#0b1117;
-      --muted:#8aa1b2;
-      --text:#d5e3f0;
-      --green:#28c57a;
-      --red:#ff4d4f;
-      --blue:#4da3ff;
-      --border:#1e2934;
+      --bg:#0f141a; --panel:#0b1117; --muted:#8aa1b2;
+      --text:#d5e3f0; --green:#28c57a; --red:#ff4d4f;
+      --blue:#4da3ff; --border:#1e2934; --highlight:#2a2140;
     }
-    *{box-sizing:border-box}
-    body{
-      margin:0; padding:20px;
-      background:var(--bg); color:var(--text);
-      font:14px/1.5 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, PingFang SC, Noto Sans CJK, "Helvetica Neue", Arial;
-    }
-    h1{margin:0 0 12px;font-weight:800;letter-spacing:.2px}
-    .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
-    .input{
-      flex:1 1 520px;
-      display:flex; align-items:center; gap:8px;
-      background:#0a1016; border:1px solid var(--border);
-      border-radius:10px; padding:8px 10px;
-    }
-    .input input{
-      flex:1; background:transparent; border:none; color:var(--text);
-      outline:none; font-size:14px;
-    }
-    select, button{
-      background:#101721; border:1px solid var(--border); color:var(--text);
-      padding:6px 10px; border-radius:10px; font-size:14px; cursor:pointer;
-    }
-    button:hover, select:hover{filter:brightness(1.05)}
-    .hint{margin:8px 0 12px; color:var(--muted); font-size:12px}
-
-    .grid{
-      display:grid;
-      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-      gap:8px; /* 更紧凑 */
-    }
-    .card{
-      background:var(--panel); border:1px solid var(--border); border-radius:10px; overflow:hidden;
-    }
-    .card .hd{
-      display:flex; justify-content:space-between; align-items:center;
-      padding:8px 10px; background:#0a1016; border-bottom:1px solid var(--border);
-    }
-    .card .hd .name{font-weight:800; letter-spacing:.2px}
-    .card .hd a{color:var(--blue); text-decoration:none}
-
-    table{width:100%; border-collapse:collapse; table-layout:fixed}
-    thead th{
-      position:sticky; top:0; z-index:1;
-      background:#0e1620; font-weight:600; color:var(--muted);
-      padding:6px 8px; border-bottom:1px solid var(--border);
-      font-size:12px;
-      text-align:left; /* 全部左对齐 */
-    }
-    tbody td{
-      padding:7px 8px; border-bottom:1px solid var(--border); font-size:13px;
-      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-      text-align:left; /* 左对齐 */
-    }
+    body{margin:0;padding:15px;background:var(--bg);color:var(--text);
+      font:13px/1.4 system-ui,Segoe UI,Roboto,PingFang SC;}
+    h1{margin:0 0 10px;font-weight:800;font-size:18px}
+    .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+    .input{flex:1 1 520px;display:flex;align-items:center;gap:6px;
+      background:#0a1016;border:1px solid var(--border);border-radius:8px;padding:6px 8px;}
+    .input input{flex:1;background:transparent;border:none;color:var(--text);outline:none;font-size:13px}
+    select,button{background:#101721;border:1px solid var(--border);color:var(--text);
+      padding:4px 8px;border-radius:8px;font-size:13px;cursor:pointer}
+    .hint{margin:4px 0 10px;color:var(--muted);font-size:11px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:6px}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+    .card .hd{display:flex;justify-content:space-between;align-items:center;
+      padding:6px 8px;background:#0a1016;border-bottom:1px solid var(--border);font-size:13px}
+    .card .hd .name{font-weight:700}
+    .card .hd a{color:var(--blue);text-decoration:none;font-size:12px}
+    table{width:100%;border-collapse:collapse;table-layout:fixed}
+    thead th{background:#0e1620;color:var(--muted);padding:4px 6px;font-size:11px;font-weight:600;text-align:left}
+    tbody td{padding:5px 6px;border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left;font-size:12px}
     tbody tr:hover{background:#0e1822}
     .mono{font-variant-numeric:tabular-nums}
-    .score.win a{color:var(--green); font-weight:700; text-decoration:none}
-    .score.loss a{color:var(--red); font-weight:700; text-decoration:none}
+    .score.win a{color:var(--green);font-weight:700;text-decoration:none}
+    .score.loss a{color:var(--red);font-weight:700;text-decoration:none}
     .muted{color:var(--muted)}
-    .link{color:var(--blue); text-decoration:none}
+    .highlight td{background:var(--highlight)!important;color:#fff!important;font-weight:700}
   </style>
 </head>
 <body>
   <h1>Pro Tracker 1.0</h1>
-
   <div class="row">
-    <div class="input">
-      <input id="players" placeholder="donk666, niko, s1s1（逗号分隔多个）" />
-    </div>
-    <select id="limit">
-      <option value="5">每人 5 场</option>
-      <option value="10">每人 10 场</option>
-    </select>
+    <div class="input"><input id="players" placeholder="多个选手用逗号分隔" /></div>
+    <select id="limit"><option value="5">每人 5 场</option><option value="10">每人 10 场</option></select>
     <button id="refresh">刷新数据</button>
   </div>
-
-  <div class="hint">提示：Score 为可点击链接（跳转 Faceit 房间页下载 Demo）；比分颜色表示胜负；时间为选手本地时间。</div>
-
+  <div class="hint">提示：比分颜色表示胜负，点击 Score 跳转 Faceit 比赛；五杀（Penta）行会被高亮；时间显示为选手本地时区。</div>
   <div id="grid" class="grid"></div>
 
-  <script>
-    const $ = (sel)=>document.querySelector(sel);
-    const grid = $("#grid");
-    const inpPlayers = $("#players");
-    const selLimit = $("#limit");
-    const btnRefresh = $("#refresh");
+<script>
+const $=s=>document.querySelector(s);
+const grid=$("#grid"), inp=$("#players"), sel=$("#limit"), btn=$("#refresh");
+inp.value="donk666, niko, s1s1";
+btn.onclick=loadAll; window.onkeydown=e=>{if(e.key==="Enter")loadAll()};
 
-    // 默认示例
-    inpPlayers.value = "donk666, niko, s1s1";
-
-    btnRefresh.addEventListener("click", loadAll);
-    window.addEventListener("keydown", (e)=>{ if(e.key==="Enter") loadAll(); });
-
-    async function fetchPlayer(name, limit){
-      const url = `/player?name=${encodeURIComponent(name)}&limit=${limit}`;
-      const res = await fetch(url, {cache:"no-store"});
-      if(!res.ok) throw new Error("fetch failed");
-      return res.json();
-    }
-
-    function playerCard(data){
-      const name = data.player;
-      const profile = data.profile_url || "#";
-      const rows = Array.isArray(data.matches) ? data.matches : [];
-
-      const col = document.createElement("div");
-      col.className = "card";
-
-      // header
-      const hd = document.createElement("div");
-      hd.className = "hd";
-      hd.innerHTML = `
-        <div class="name">${name}</div>
-        <a class="link" href="${profile}" target="_blank" rel="noopener">Faceit</a>
-      `;
-      col.appendChild(hd);
-
-      // 紧凑表：Date / Score(链接) / K/A/D / Rating
-      const table = document.createElement("table");
-      table.innerHTML = `
-        <thead>
-          <tr>
-            <th style="width:156px">Date</th>
-            <th style="width:84px">Score</th>
-            <th style="width:110px">K / A / D</th>
-            <th style="width:70px">Rating</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      `;
-      const tbody = table.querySelector("tbody");
-
-      if(rows.length===0){
-        const tr = document.createElement("tr");
-        tr.innerHTML = `<td colspan="4" class="muted">最近 0 场。</td>`;
-        tbody.appendChild(tr);
-      }else{
-        rows.forEach(r=>{
-          const scoreClass = r.win ? "win" : "loss";
-          const k = r.k ?? 0;
-          const a = r.a ?? r.assists ?? 0;
-          const d = r.d ?? r.deaths ?? 0;
-          const rating = (r.rating ?? r.hltv_rating ?? "-");
-          const tr = document.createElement("tr");
-          tr.innerHTML = `
-            <td class="mono">${r.date || ""}</td>
-            <td class="score ${scoreClass}">
-              <a href="${r.match_url}" target="_blank" rel="noopener">${r.score || "-"}</a>
-            </td>
-            <td class="mono">${k} / ${a} / ${d}</td>
-            <td class="mono">${rating}</td>
-          `;
-          tbody.appendChild(tr);
-        });
-      }
-
-      col.appendChild(table);
-      return col;
-    }
-
-    // 防并发重复：批次令牌
-    let lastRun = 0;
-
-    async function loadAll(){
-      const names = inpPlayers.value
-        .split(",")
-        .map(s=>s.trim())
-        .filter(Boolean);
-
-      const limit = parseInt(selLimit.value,10) || 5;
-
-      const runId = ++lastRun;
-
-      grid.replaceChildren();
-      const loading = document.createElement("div");
-      loading.className = "muted";
-      loading.textContent = "加载中…";
-      grid.appendChild(loading);
-
-      if(names.length===0){
-        loading.textContent = "请输入至少一个玩家昵称。";
-        return;
-      }
-
-      const tasks = names.map(n=>fetchPlayer(n, limit).catch(()=>({player:n, profile_url:"#", matches:[]})));
-      const all = await Promise.all(tasks);
-
-      if(runId !== lastRun) return;
-
-      const columns = all.map(data => playerCard(data));
-      grid.replaceChildren(...columns);
-    }
-
-    loadAll();
-  </script>
+async function fetchPlayer(name,limit){
+  const url=`/player?name=${encodeURIComponent(name)}&limit=${limit}`;
+  const r=await fetch(url,{cache:"no-store"}); if(!r.ok)throw Error(await r.text()); return r.json();
+}
+function playerCard(data){
+  const rows=Array.isArray(data.matches)?data.matches:[];
+  const col=document.createElement("div"); col.className="card";
+  col.innerHTML=`<div class="hd"><div class="name">${data.player}</div>
+  <a href="${data.profile_url||"#"}" target="_blank">Faceit</a></div>`;
+  const table=document.createElement("table");
+  table.innerHTML=`<thead><tr>
+    <th style="width:122px">Date</th>
+    <th style="width:66px">Score</th>
+    <th style="width:86px">K/A/D</th>
+    <th style="width:58px">Rating</th>
+  </tr></thead><tbody></tbody>`;
+  const tb=table.querySelector("tbody");
+  if(rows.length===0){
+    tb.innerHTML=`<tr><td colspan=4 class="muted">最近 0 场</td></tr>`;
+  } else {
+    rows.forEach(r=>{
+      const scoreClass=r.win?"win":"loss";
+      const tr=document.createElement("tr");
+      if(r.is_ace){tr.className="highlight";}
+      tr.innerHTML=`
+        <td class="mono">${r.date||""}</td>
+        <td class="score ${scoreClass}"><a href="${r.match_url}" target="_blank">${r.score||"-"}</a></td>
+        <td class="mono">${r.k}/${r.a}/${r.d}</td>
+        <td class="mono">${r.rating ?? "-"}</td>`;
+      tb.appendChild(tr);
+    });
+  }
+  col.appendChild(table); return col;
+}
+let last=0;
+async function loadAll(){
+  const names=inp.value.split(",").map(s=>s.trim()).filter(Boolean);
+  const limit=parseInt(sel.value,10)||5;
+  const run=++last; grid.textContent="加载中…";
+  const all=await Promise.all(names.map(n=>fetchPlayer(n,limit).catch(()=>({player:n,matches:[]}))));
+  if(run!==last)return;
+  grid.replaceChildren(...all.map(playerCard));
+}
+loadAll();
+</script>
 </body>
 </html>
