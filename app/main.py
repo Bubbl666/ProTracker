@@ -247,3 +247,57 @@ def get_matches_with_stats(
         })
 
     return out
+
+# ==== 追加：真实比分查询（懒加载用） ====
+import os, requests
+from fastapi import Query
+
+FACEIT_API_KEY = os.getenv("FACEIT_API_KEY", "")
+
+@app.get("/match/score")
+def match_score(match_id: str = Query(..., description="Faceit match id")):
+    """
+    返回 { match_id, score_text, faction1, faction2 }
+    说明：
+      - 调 Faceit v4: GET /data/v4/matches/{match_id}
+      - 从 rounds 或 results 中推导最终比分
+    """
+    if not FACEIT_API_KEY:
+      return {"match_id": match_id, "score_text": None}
+
+    url = f"https://open.faceit.com/data/v4/matches/{match_id}"
+    try:
+      r = requests.get(url, headers={"Authorization": f"Bearer {FACEIT_API_KEY}"}, timeout=12)
+      r.raise_for_status()
+      data = r.json()
+    except Exception:
+      return {"match_id": match_id, "score_text": None}
+
+    # 尝试读取官方结构（不同房型结构略有差异，这里做尽量兼容）
+    f1 = f2 = None
+
+    # 1) 有 results 的情况
+    res = data.get("results") or {}
+    if isinstance(res, dict):
+        f1 = res.get("score", {}).get("faction1")
+        f2 = res.get("score", {}).get("faction2")
+
+    # 2) 有 rounds（多数 5v5 pugs）
+    if (f1 is None or f2 is None) and isinstance(data.get("rounds"), list):
+        last = None
+        for rnd in data["rounds"]:
+            if rnd.get("status") == "finished":
+                last = rnd
+        if last and isinstance(last.get("round_stats"), dict):
+            s1 = last["round_stats"].get("Score Team A")
+            s2 = last["round_stats"].get("Score Team B")
+            try:
+                f1 = int(s1) if s1 is not None else f1
+                f2 = int(s2) if s2 is not None else f2
+            except:
+                pass
+
+    if f1 is None or f2 is None:
+        return {"match_id": match_id, "score_text": None}
+
+    return {"match_id": match_id, "score_text": f"{f1} / {f2}", "faction1": f1, "faction2": f2}
