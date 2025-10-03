@@ -1,4 +1,5 @@
 # app/main.py
+from __future__ import annotations
 # ==== 新增：顶部导入 ====
 import time
 from typing import Optional, Dict, Any
@@ -91,8 +92,6 @@ async def matches_with_stats(
                 await _enrich_team_players(session, t, enrich=bool(enrich))
 
         return matches
-
-from __future__ import annotations
 
 import os
 import time
