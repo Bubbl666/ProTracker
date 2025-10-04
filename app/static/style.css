@@ -1,88 +1,156 @@
 :root{
-  --bg:#0f141a;
-  --panel:#121820;
-  --muted:#98a2b3;
-  --fg:#e5f1ff;
-  --win:#1db954;
-  --loss:#e74c3c;
-  --pill:#1b2531;
-  --hl:#2f3947;
-  --gap:14px;
+  --bg:#0f1419;
+  --card:#121820;
+  --text:#dfe7ef;
+  --muted:#90a4b4;
+  --accent:#79f2a5;
+  --red:#ff6b6b;
+  --green:#1cd16f;
+  --table-border:#1a2230;
+  --map-size:16px;
 }
 
+/* 页面基础 */
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--fg);font-family:Inter,system-ui,Segoe UI,Arial,sans-serif}
-h1{margin:18px 0 8px 0;font-size:28px;letter-spacing:.5px}
-
-.page{max-width:1700px;margin:0 auto;padding:14px}
-
-.toolbar{display:flex;gap:10px;align-items:center;margin:8px 0 10px 0}
-.toolbar input{
-  flex:1;min-width:260px;background:#0b1016;color:var(--fg);border:1px solid #1e2935;
-  padding:10px 12px;border-radius:8px;outline:none;
+html,body{height:100%}
+body{
+  margin:0;
+  font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,"Noto Sans","PingFang SC",sans-serif;
+  color:var(--text);
+  background:var(--bg);
 }
-.toolbar select,.toolbar button{
-  background:#0b1016;color:var(--fg);border:1px solid #1e2935;
-  padding:10px 12px;border-radius:8px;cursor:pointer
-}
-.tip{color:var(--muted);margin:0 0 10px 0}
 
+/* 顶部 */
+.topbar{
+  padding:18px 20px 10px;
+}
+.topbar h1{
+  margin:0 0 10px 0;
+  font-size:24px;
+  color:#caffd7;
+}
+.controls{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  margin-bottom:8px;
+}
+.controls input[type="text"]{
+  width:520px;
+  padding:8px 10px;
+  border-radius:8px;
+  border:1px solid var(--table-border);
+  background:#0b1016;
+  color:var(--text);
+}
+.controls select,
+.controls button{
+  padding:8px 10px;
+  border-radius:8px;
+  border:1px solid var(--table-border);
+  background:#0b1016;
+  color:var(--text);
+  cursor:pointer;
+}
+.controls button:hover{border-color:#2a3a50}
+.hint{color:var(--muted);font-size:12px;margin-top:4px}
+
+/* 网格（限制一行最多 N 列） */
 .grid{
   display:grid;
-  grid-template-columns: repeat(5, minmax(280px, 1fr)); /* 一行最多 5 列 */
-  gap: var(--gap);
+  grid-template-columns: repeat(var(--max-cols, 5), minmax(320px,1fr));
+  gap:12px;
+  padding:0 12px 24px;
+}
+@media (max-width:1600px){
+  .grid{grid-template-columns: repeat(4, minmax(320px,1fr));}
+}
+@media (max-width:1300px){
+  .grid{grid-template-columns: repeat(3, minmax(320px,1fr));}
+}
+@media (max-width:1000px){
+  .grid{grid-template-columns: repeat(2, minmax(280px,1fr));}
+}
+@media (max-width:680px){
+  .grid{grid-template-columns: repeat(1, minmax(260px,1fr));}
 }
 
-.card{
-  background:var(--panel);
-  border:1px solid #1b2733;
-  border-radius:10px;
+/* 玩家卡片 */
+.player-card{
+  background:var(--card);
+  border:1px solid var(--table-border);
+  border-radius:14px;
   overflow:hidden;
 }
-
-.card__title{
-  display:flex;justify-content:space-between;align-items:center;
-  padding:10px 12px;border-bottom:1px solid #1b2733;background:#0d131a
+.card-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:12px 14px;
+  border-bottom:1px solid var(--table-border);
 }
-.card__title .nick{font-weight:600}
-.card__title .faceit{color:#7ec3ff;font-size:13px;text-decoration:none}
-
-.table{width:100%;border-collapse:collapse}
-.table th,.table td{padding:9px 10px;border-bottom:1px solid #182431;font-size:13px}
-.table thead th{color:var(--muted);font-weight:600}
-
-.table td.score{text-align:left}
-.table td.kad, .table td.rating{text-align:left}
-
-.pill{
-  display:inline-block;border-radius:999px;padding:2px 9px;background:var(--pill);font-weight:700
+.card-head h2{margin:0;font-size:16px}
+.faceit-link{
+  font-size:12px;
+  color:#a6d4ff;
+  text-decoration:none;
+  border:1px solid #1e2a3b;
+  padding:4px 8px;
+  border-radius:8px;
 }
-.pill.win{color:var(--win)}
-.pill.loss{color:var(--loss)}
+.faceit-link:hover{background:#0b121a}
 
-.map{display:flex;gap:8px;align-items:center}
-.map img{width:18px;height:18px;border-radius:4px;border:1px solid #1b2733;background:#0b1016}
-
-tr.hl td{background:linear-gradient(90deg, rgba(255,200,0,.12), transparent 60%)}
-tr.hl td .pill{box-shadow:0 0 0 2px rgba(255,200,0,.25) inset}
-
-/* 更紧凑：缩小列间距 */
-.table th:nth-child(1), .table td:nth-child(1){width:42%}
-.table th:nth-child(2), .table td:nth-child(2){width:16%}
-.table th:nth-child(3), .table td:nth-child(3){width:20%}
-.table th:nth-child(4), .table td:nth-child(4){width:14%}
-.table th:nth-child(5), .table td:nth-child(5){width:8%}
-
-/* 小屏自动换行 */
-@media (max-width: 1600px){
-  .grid{grid-template-columns: repeat(4, minmax(280px, 1fr));}
+/* 表格 */
+.matches{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
 }
-@media (max-width: 1280px){
-  .grid{grid-template-columns: repeat(3, minmax(280px, 1fr));}
+.matches thead th{
+  text-align:left;
+  font-weight:600;
+  color:#a9bac8;
+  font-size:12px;
+  padding:10px 12px;
+  border-bottom:1px solid var(--table-border);
 }
-@media (max-width: 980px){
-  .grid{grid-template-columns: repeat(2, minmax(280px, 1fr));}
+.matches tbody td{
+  padding:10px 12px;
+  border-bottom:1px solid var(--table-border);
+  vertical-align:middle;
 }
-@media (max-width: 640px){
-  .grid{grid-template-columns: 1fr;}
+
+/* 列对齐（紧凑） */
+.col-date{width:44%}
+.col-score{width:13%}
+.col-map{width:20%}
+.col-kad{width:13%}
+.col-rating{width:10%}
+
+/* 结果颜色 */
+.col-score.win{color:var(--green);font-weight:700}
+.col-score.loss{color:var(--red);font-weight:700}
+
+/* 地图小图 */
+.map-icon{
+  width:var(--map-size);
+  height:var(--map-size);
+  border-radius:3px;
+  margin-right:6px;
+  object-fit:cover;
+  vertical-align:middle;
+  transform:translateY(-1px);
+}
+
+/* 五杀高亮：除 score 外文字高亮 */
+.matches tbody tr.highlight td:not(.col-score){
+  color:#fff49a;
+}
+
+/* 底部 */
+.footer{
+  padding:8px 16px 18px;
+  color:var(--muted);
+  font-size:12px;
+  text-align:center;
 }
