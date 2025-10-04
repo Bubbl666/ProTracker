@@ -22,7 +22,7 @@ FACEIT_API_BASE = "https://open.faceit.com/data/v4"
 API_KEY = os.getenv("FACEIT_API_KEY", "").strip()
 
 # 默认玩家（你可以直接改这里）
-DEFAULT_NICKNAMES: List[str] = ["donk666", "niko", "s1s1", "CEMEN_BAKIN", "m0NESY", "b1t". "nocries"]
+DEFAULT_NICKNAMES: List[str] = ["donk666", "niko", "s1s1", "CEMEN_BAKIN", "m0NESY", "b1t", "nocries"]
 
 # 一行最多显示列数
 MAX_COLUMNS_PER_ROW = 5
