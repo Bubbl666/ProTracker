@@ -10,51 +10,101 @@
       --text:#d5e3f0; --green:#28c57a; --red:#ff4d4f;
       --blue:#4da3ff; --border:#1e2934; --highlight:#2a2140;
     }
-    body{margin:0;padding:15px;background:var(--bg);color:var(--text);
-      font:13px/1.4 system-ui,Segoe UI,Roboto,PingFang SC;}
-    h1{margin:0 0 10px;font-weight:800;font-size:18px}
+    body{margin:0;padding:12px;background:var(--bg);color:var(--text);
+      font:12px/1.35 system-ui,Segoe UI,Roboto,PingFang SC;}
+    h1{margin:0 0 8px;font-weight:800;font-size:16px}
     .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
     .input{flex:1 1 520px;display:flex;align-items:center;gap:6px;
       background:#0a1016;border:1px solid var(--border);border-radius:8px;padding:6px 8px;}
-    .input input{flex:1;background:transparent;border:none;color:var(--text);outline:none;font-size:13px}
+    .input input{flex:1;background:transparent;border:none;color:var(--text);outline:none;font-size:12px}
     select,button{background:#101721;border:1px solid var(--border);color:var(--text);
-      padding:4px 8px;border-radius:8px;font-size:13px;cursor:pointer}
-    .hint{margin:4px 0 10px;color:var(--muted);font-size:11px}
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:6px}
+      padding:4px 8px;border-radius:8px;font-size:12px;cursor:pointer}
+    .hint{margin:4px 0 8px;color:var(--muted);font-size:11px}
+
+    /* 更紧凑的列：减小列最小宽度，保证 7 列时 Rating 不会被挤掉 */
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:6px}
     .card{background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden}
     .card .hd{display:flex;justify-content:space-between;align-items:center;
-      padding:6px 8px;background:#0a1016;border-bottom:1px solid var(--border);font-size:13px}
-    .card .hd .name{font-weight:700}
-    .card .hd a{color:var(--blue);text-decoration:none;font-size:12px}
+      padding:6px 8px;background:#0a1016;border-bottom:1px solid var(--border);font-size:12px}
+    .card .hd .name{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:170px}
+    .card .hd a{color:var(--blue);text-decoration:none;font-size:11px;white-space:nowrap}
+
     table{width:100%;border-collapse:collapse;table-layout:fixed}
-    thead th{background:#0e1620;color:var(--muted);padding:4px 6px;font-size:11px;font-weight:600;text-align:left}
-    tbody td{padding:5px 6px;border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left;font-size:12px}
+    thead th{background:#0e1620;color:var(--muted);padding:4px 6px;font-size:11px;font-weight:700;text-align:left}
+    tbody td{padding:4px 6px;border-bottom:1px solid var(--border);
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left;font-size:12px}
     tbody tr:hover{background:#0e1822}
     .mono{font-variant-numeric:tabular-nums}
     .score.win a{color:var(--green);font-weight:700;text-decoration:none}
     .score.loss a{color:var(--red);font-weight:700;text-decoration:none}
     .muted{color:var(--muted)}
     .highlight td{background:var(--highlight)!important;color:#fff!important;font-weight:700}
+
+    /* 列宽压缩，确保 Rating 可见 */
+    th.col-date{width:114px}
+    th.col-score{width:58px}
+    th.col-map{width:88px}
+    th.col-kad{width:78px}
+    th.col-rating{width:56px}
+
+    .map-cell{display:flex;align-items:center;gap:6px}
+    .map-cell img{width:14px;height:14px;border-radius:3px;flex:0 0 auto}
   </style>
 </head>
 <body>
   <h1>Pro Tracker 1.0</h1>
   <div class="row">
-    <div class="input"><input id="players" placeholder="多个选手用逗号分隔" /></div>
-    <select id="limit"><option value="5">每人 5 场</option><option value="10">每人 10 场</option></select>
+    <div class="input"><input id="players" placeholder="多个选手用逗号分隔（支持昵称或 id:PLAYER_ID）" /></div>
+    <select id="limit">
+      <option value="5">每人 5 场</option>
+      <option value="10">每人 10 场</option>
+    </select>
     <button id="refresh">刷新数据</button>
   </div>
-  <div class="hint">提示：比分颜色表示胜负，点击 <b>Score</b> 跳转 Faceit 比赛；五杀（Penta）行会高亮；时间按选手所在地时区显示。</div>
+  <div class="hint">
+    比分颜色表示胜负；点击 <b>Score</b> 跳转 Faceit 比赛；五杀（Penta）整行高亮；时间按选手所在地时区显示。<br>
+    默认示例可在本页源码顶部修改（<b>index.html</b> 中的 <code>inp.value</code>）。
+  </div>
   <div id="grid" class="grid"></div>
 
 <script>
 const $=s=>document.querySelector(s);
 const grid=$("#grid"), inp=$("#players"), sel=$("#limit"), btn=$("#refresh");
-inp.value="donk666, niko, s1s1"; // 默认示例
+
+/**
+ * 你可以在这里自定义默认搜索（支持昵称和 id:xxxx）。
+ * 想改默认值：就改下面这一行的内容。
+ * 例子里我演示了一个 ID 写法：
+ */
+inp.value="donk666, id:e5e8e2a6-d716-4493-b949-e16965f41654, niko, s1s1";
+
+/** Map -> 简洁 logo（内嵌 SVG），不依赖外部静态资源 */
+function mapSlug(raw){
+  if(!raw) return "";
+  return String(raw).toLowerCase().replace(/^de_/, "").trim();
+}
+function mapIconData(slug){
+  // 为常见 CS2 地图设计不同颜色的小方块 + 首字母
+  const palette={
+    mirage:"#E07A5F", inferno:"#EF476F", dust2:"#FFD166", d2:"#FFD166",
+    nuke:"#06D6A0", overpass:"#118AB2", ancient:"#7CB518",
+    anubis:"#9C6ADE", vertigo:"#6C757D", cache:"#17A2B8",
+    office:"#A3BE8C"
+  };
+  const name = (slug||"").toLowerCase();
+  const color = palette[name] || "#8892b0";
+  const label = (name||"").slice(0,2).toUpperCase() || "MAP";
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14'>
+    <rect rx='3' ry='3' x='0' y='0' width='14' height='14' fill='${color}' />
+    <text x='7' y='10' text-anchor='middle' font-size='8' fill='#fff' font-family='system-ui,Segoe UI,Roboto'>${label}</text>
+  </svg>`;
+  return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+}
+
 btn.onclick=loadAll; window.onkeydown=e=>{if(e.key==="Enter")loadAll()};
 
-async function fetchPlayer(name,limit){
-  const url=`/player?name=${encodeURIComponent(name)}&limit=${limit}`;
+async function fetchPlayer(q,limit){
+  const url=`/player?q=${encodeURIComponent(q)}&limit=${limit}`;
   const r=await fetch(url,{cache:"no-store"});
   if(!r.ok){ throw new Error(await r.text()); }
   return r.json();
@@ -63,28 +113,34 @@ async function fetchPlayer(name,limit){
 function playerCard(data){
   const rows=Array.isArray(data.matches)?data.matches:[];
   const col=document.createElement("div"); col.className="card";
-  col.innerHTML=`<div class="hd"><div class="name">${data.player}</div>
-  <a href="${data.profile_url||"#"}" target="_blank">Faceit</a></div>`;
+  col.innerHTML=`<div class="hd">
+    <div class="name" title="${data.player}">${data.player}</div>
+    <a href="${data.profile_url||"#"}" target="_blank">Faceit</a>
+  </div>`;
   const table=document.createElement("table");
   table.innerHTML=`<thead><tr>
-    <th style="width:122px">Date</th>
-    <th style="width:66px">Score</th>
-    <th style="width:86px">K/A/D</th>
-    <th style="width:58px">Rating</th>
+    <th class="col-date">Date</th>
+    <th class="col-score">Score</th>
+    <th class="col-map">Map</th>
+    <th class="col-kad">K/A/D</th>
+    <th class="col-rating">Rating</th>
   </tr></thead><tbody></tbody>`;
   const tb=table.querySelector("tbody");
   if(rows.length===0){
-    tb.innerHTML=`<tr><td colspan=4 class="muted">最近 0 场</td></tr>`;
+    tb.innerHTML=`<tr><td colspan="5" class="muted">最近 0 场</td></tr>`;
   } else {
     rows.forEach(r=>{
       const scoreClass=r.win?"win":"loss";
+      const slug = mapSlug(r.map);
+      const icon = mapIconData(slug);
       const tr=document.createElement("tr");
       if(r.is_ace){tr.className="highlight";}
       tr.innerHTML=`
         <td class="mono">${r.date||""}</td>
         <td class="score ${scoreClass}"><a href="${r.match_url}" target="_blank">${r.score||"-"}</a></td>
+        <td class="map-cell"><img alt="${r.map}" src="${icon}"><span title="${r.map}">${r.map||"-"}</span></td>
         <td class="mono">${r.k}/${r.a}/${r.d}</td>
-        <td class="mono">${r.rating ?? "-"}</td>`;
+        <td class="mono">${(r.rating??"-")}</td>`;
       tb.appendChild(tr);
     });
   }
