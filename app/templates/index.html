@@ -1,15 +1,67 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Pro Tracker 1.0</title>
-  <link rel="stylesheet" href="/static/style.css" />
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Pro Tracker 1.0</title>
+<style>
+  :root{
+    --bg:#0d1117; --card:#0f1520; --line:#1d2635; --text:#e6edf3; --muted:#9fb0c0;
+    --ok:#1cd16f; --bad:#ff6b6b; --link:#9ad1ff; --highlight:#fff49a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,"PingFang SC",sans-serif;}
+  a{color:var(--link);text-decoration:none}
+  a:hover{opacity:.9}
+  /* 顶部 */
+  .bar{padding:14px 16px 8px}
+  .bar h1{margin:0 0 10px;font-size:26px;color:#caffd7}
+  .ctrl{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+  .ctrl input,.ctrl select,.ctrl button{
+    background:#0b1016;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px 10px
+  }
+  .hint{color:var(--muted);font-size:12px}
+  /* 网格：限制每行最多 N 列 */
+  .grid{display:grid;gap:12px;padding:10px 12px 24px;
+        grid-template-columns: repeat(var(--max-cols), minmax(320px,1fr))}
+  @media (max-width:1600px){ .grid{grid-template-columns: repeat(4, minmax(320px,1fr));} }
+  @media (max-width:1300px){ .grid{grid-template-columns: repeat(3, minmax(320px,1fr));} }
+  @media (max-width:980px) { .grid{grid-template-columns: repeat(2, minmax(300px,1fr));} }
+  @media (max-width:680px) { .grid{grid-template-columns: repeat(1, minmax(260px,1fr));} }
+
+  /* 卡片表格风格（干净） */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .head{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
+  .head h2{margin:0;font-size:16px}
+  .faceit{font-size:12px;border:1px solid var(--line);padding:4px 8px;border-radius:8px}
+
+  table{width:100%;border-collapse:collapse}
+  thead th{font-size:12px;color:#a7b6c7;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+  tbody td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+
+  /* 列宽＆左对齐（紧凑） */
+  .c-date{width:40%}
+  .c-score{width:12%}
+  .c-map{width:22%}
+  .c-kad{width:16%}
+  .c-rating{width:10%}
+
+  .win{color:var(--ok);font-weight:700}
+  .loss{color:var(--bad);font-weight:700}
+
+  .map-icon{width:16px;height:16px;border-radius:3px;vertical-align:-3px;margin-right:6px;object-fit:cover}
+
+  /* 五杀高亮：除 score 外的整行文字提亮 */
+  tr.highlight td:not(.c-score){ color: var(--highlight); }
+
+  .foot{padding:10px 16px;color:var(--muted);font-size:12px;text-align:center}
+</style>
 </head>
 <body>
-  <header class="topbar">
+
+  <div class="bar">
     <h1>Pro Tracker 1.0</h1>
-    <form class="controls" method="get" action="/">
+    <form class="ctrl" method="get" action="/">
       <input type="text" name="players" value="{{ query_players }}" placeholder="玩家昵称，逗号分隔">
       <select name="limit">
         {% for n in [3,5,10,15,20] %}
@@ -19,47 +71,45 @@
       <button type="submit">刷新数据</button>
     </form>
     <div class="hint">提示：Score 颜色表示胜负；时间为选手本地时间；Map 显示地图小图 + 名称；有五杀会高亮。</div>
-  </header>
+  </div>
 
   <main class="grid" style="--max-cols: {{ max_cols }};">
     {% for p in panels %}
-    <section class="player-card">
-      <div class="card-head">
+    <section class="card">
+      <div class="head">
         <h2>{{ p.nickname }}</h2>
-        <a class="faceit-link" href="{{ p.faceit_url }}" target="_blank">Faceit</a>
+        <a class="faceit" href="{{ p.faceit_url }}" target="_blank">Faceit</a>
       </div>
 
-      <table class="matches">
+      <table>
         <thead>
           <tr>
-            <th class="col-date">Date</th>
-            <th class="col-score">Score</th>
-            <th class="col-map">Map</th>
-            <th class="col-kad">K / A / D</th>
-            <th class="col-rating">Rating</th>
+            <th class="c-date">Date</th>
+            <th class="c-score">Score</th>
+            <th class="c-map">Map</th>
+            <th class="c-kad">K / A / D</th>
+            <th class="c-rating">Rating</th>
           </tr>
         </thead>
         <tbody>
-        {% for m in p.matches %}
+          {% for m in p.matches %}
           <tr class="{% if m.highlight %}highlight{% endif %}">
-            <td class="col-date"><a href="{{ m.match_link }}" target="_blank">{{ m.date }}</a></td>
-            <td class="col-score {{ m.result_class }}">{{ m.score }}</td>
-            <td class="col-map">
-              <img src="{{ m.map_img }}" alt="map" class="map-icon">
+            <td class="c-date"><a href="{{ m.match_link }}" target="_blank">{{ m.date }}</a></td>
+            <td class="c-score {{ m.result_class }}">{{ m.score }}</td>
+            <td class="c-map">
+              <img class="map-icon" src="{{ m.map_img }}" alt="">
               {{ m.map }}
             </td>
-            <td class="col-kad">{{ m.k }} / {{ m.a }} / {{ m.d }}</td>
-            <td class="col-rating">{{ m.rating }}</td>
+            <td class="c-kad">{{ m.k }} / {{ m.a }} / {{ m.d }}</td>
+            <td class="c-rating">{{ m.rating }}</td>
           </tr>
-        {% endfor %}
+          {% endfor %}
         </tbody>
       </table>
     </section>
     {% endfor %}
   </main>
 
-  <footer class="footer">
-    <span>Pro Tracker 1.0 · v{{ app_version }}</span>
-  </footer>
+  <div class="foot">Pro Tracker 1.0 · v{{ app_version }}</div>
 </body>
 </html>
