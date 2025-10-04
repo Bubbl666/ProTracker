@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
-app = FastAPI(title="Pro Tracker 1.0", version="0.1.1")
+app = FastAPI(title="Pro Tracker 1.0", version="0.1.2")
 
 # 静态资源与模板
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -22,7 +22,7 @@ FACEIT_API_BASE = "https://open.faceit.com/data/v4"
 API_KEY = os.getenv("FACEIT_API_KEY", "").strip()
 
 # 默认玩家（你可以直接改这里）
-DEFAULT_NICKNAMES: List[str] = ["donk666", "niko", "s1s1"]
+DEFAULT_NICKNAMES: List[str] = ["donk666", "niko", "s1s1", "CEMEN_BAKIN", "m0NESY", "b1t". "nocries"]
 
 # 一行最多显示列数
 MAX_COLUMNS_PER_ROW = 5
@@ -70,11 +70,7 @@ def to_local_time(ts: int, tz_str: str) -> str:
 
 
 def map_img_filename(map_name: str) -> str:
-    """把 faceit 的 Map 字段映射到 /static/maps/*.png
-    你只需要在 app/static/maps/ 下放这些名字的 png：
-      mirage.png inferno.png dust2.png overpass.png vertigo.png
-      nuke.png train.png ancient.png anubis.png default.png
-    """
+    """把 faceit 的 Map 字段映射到 /static/maps/*.png"""
     name = (map_name or "").lower()
     mapping = {
         "de_mirage": "mirage.png",
@@ -100,6 +96,18 @@ def hltv_like_rating(player_stats: Dict[str, Any]) -> float:
     return round(rating, 2)
 
 
+def _parse_score(score_str: str) -> Optional[tuple[int, int]]:
+    try:
+        parts = [p.strip() for p in score_str.replace("\\", "/").split("/")]
+        if len(parts) != 2:
+            return None
+        a = int(parts[0])
+        b = int(parts[1])
+        return a, b
+    except Exception:
+        return None
+
+
 def parse_match_panel(item: Dict[str, Any], player_id: str, player_tz: str) -> Optional[Dict[str, Any]]:
     match_id = item.get("match_id")
     if not match_id:
@@ -118,22 +126,42 @@ def parse_match_panel(item: Dict[str, Any], player_id: str, player_tz: str) -> O
     teams = r0.get("teams", []) or []
     map_name = round_stats.get("Map", item.get("map", "Unknown"))
     score = round_stats.get("Score", round_stats.get("score", "")) or ""
+    winner_id = r0.get("winner", "")
 
-    # 找到该玩家的统计与队伍
+    # 找到玩家所在队伍及其索引
     my_team_id = None
+    my_team_index = None
     pstats = None
-    for t in teams:
+    for idx, t in enumerate(teams):
         for p in t.get("players", []):
             if p.get("player_id") == player_id:
                 my_team_id = t.get("team_id")
+                my_team_index = idx
                 pstats = p.get("player_stats", {})
                 break
+        if pstats is not None:
+            break
 
     if pstats is None:
         return None
 
-    winner = r0.get("winner", "")
-    result_class = "win" if my_team_id and my_team_id == winner else "loss"
+    # 先按 winner 判断
+    result_class = None
+    if my_team_id and winner_id:
+        result_class = "win" if my_team_id == winner_id else "loss"
+
+    # 如果 winner 不可靠/缺失，回退用 score + 队伍顺序判断
+    if result_class is None:
+        ab = _parse_score(score)
+        if ab and my_team_index in (0, 1):
+            a, b = ab
+            my_score = a if my_team_index == 0 else b
+            opp_score = b if my_team_index == 0 else a
+            result_class = "win" if my_score > opp_score else "loss"
+
+    # 再不行，最后兜底为 loss，避免全显示同色
+    if result_class is None:
+        result_class = "loss"
 
     kills = int(pstats.get("Kills", 0))
     assists = int(pstats.get("Assists", 0))
@@ -208,14 +236,14 @@ async def index(
             "limit": limit,
             "query_players": ", ".join(nicknames),
             "max_cols": MAX_COLUMNS_PER_ROW,
-            "app_version": "0.1.1",
+            "app_version": "0.1.2",
         },
     )
 
 
 @app.get("/health")
 async def health():
-    return {"ok": True, "service": "protracker", "version": "0.1.1"}
+    return {"ok": True, "service": "protracker", "version": "0.1.2"}
 
 
 @app.get("/version")
