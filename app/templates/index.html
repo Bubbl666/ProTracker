@@ -1,79 +1,65 @@
-<!doctype html>
-<html lang="zh">
+<!DOCTYPE html>
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Pro Tracker 1.0</title>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <div class="page">
+  <header class="topbar">
     <h1>Pro Tracker 1.0</h1>
-
-    <form class="toolbar" method="get" action="/">
-      <input type="text" name="players" placeholder="多个玩家，逗号分隔"
-             value="{{ players_str }}" />
+    <form class="controls" method="get" action="/">
+      <input type="text" name="players" value="{{ query_players }}" placeholder="玩家昵称，逗号分隔">
       <select name="limit">
-        {% for n in [5,10,15,20] %}
-          <option value="{{n}}" {% if n == limit %}selected{% endif %}>每人 {{n}} 场</option>
+        {% for n in [3,5,10,15,20] %}
+          <option value="{{n}}" {% if limit==n %}selected{% endif %}>每人 {{n}} 场</option>
         {% endfor %}
       </select>
       <button type="submit">刷新数据</button>
     </form>
+    <div class="hint">提示：Score 颜色表示胜负；时间为选手本地时间；Map 显示地图小图 + 名称；有五杀会高亮。</div>
+  </header>
 
-    <p class="tip">
-      提示：Match 点击跳转 Faceit 比赛页下载 Demo；胜负自动上色；时间为选手的本地时间；一行最多显示 5 列。
-    </p>
+  <main class="grid" style="--max-cols: {{ max_cols }};">
+    {% for p in panels %}
+    <section class="player-card">
+      <div class="card-head">
+        <h2>{{ p.nickname }}</h2>
+        <a class="faceit-link" href="{{ p.faceit_url }}" target="_blank">Faceit</a>
+      </div>
 
-    <div class="grid">
-      {% for c in cards %}
-        <div class="card">
-          <div class="card__title">
-            <span class="nick">{{ c.nickname }}</span>
-            <a class="faceit" href="{{ c.faceit_url }}" target="_blank">Faceit</a>
-          </div>
+      <table class="matches">
+        <thead>
+          <tr>
+            <th class="col-date">Date</th>
+            <th class="col-score">Score</th>
+            <th class="col-map">Map</th>
+            <th class="col-kad">K / A / D</th>
+            <th class="col-rating">Rating</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for m in p.matches %}
+          <tr class="{% if m.highlight %}highlight{% endif %}">
+            <td class="col-date"><a href="{{ m.match_link }}" target="_blank">{{ m.date }}</a></td>
+            <td class="col-score {{ m.result_class }}">{{ m.score }}</td>
+            <td class="col-map">
+              <img src="{{ m.map_img }}" alt="map" class="map-icon">
+              {{ m.map }}
+            </td>
+            <td class="col-kad">{{ m.k }} / {{ m.a }} / {{ m.d }}</td>
+            <td class="col-rating">{{ m.rating }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endfor %}
+  </main>
 
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th class="score">Score</th>
-                <th>Map</th>
-                <th>K / A / D</th>
-                <th class="rating">Rating</th>
-              </tr>
-            </thead>
-            <tbody>
-            {% for m in c.matches %}
-              <tr class="{% if m.penta|int >= 1 %}hl{% endif %}">
-                <td class="date">
-                  <a class="match" href="{{ m.faceit_match }}" target="_blank"
-                    title="打开 Faceit 比赛页">{{ m.time_text }}</a>
-                </td>
-                <td class="score">
-                  <span class="pill {% if m.result == 'Win' %}win{% else %}loss{% endif %}">
-                    {{ m.score }}
-                  </span>
-                </td>
-                <td class="map">
-                  <img src="{{ m.map_img }}" alt="{{ m.map }}" />
-                  <span>{{ m.map }}</span>
-                </td>
-                <td class="kad">{{ m.k }} / {{ m.a }} / {{ m.d }}</td>
-                <td class="rating">
-                  {% if m.rating and m.rating != '-' %}
-                    {{ m.rating }}
-                  {% else %}
-                    -
-                  {% endif %}
-                </td>
-              </tr>
-            {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      {% endfor %}
-    </div>
-  </div>
+  <footer class="footer">
+    <span>Pro Tracker 1.0 · v{{ app_version }}</span>
+  </footer>
 </body>
 </html>
