@@ -45,14 +45,22 @@
   /* 列宽与左对齐（更紧凑） */
   .c-date{width:40%}
   .c-score{width:12%}
-  .c-map{width:22%}
-  .c-kad{width:16%}
-  .c-rating{width:10%}
+  .c-map{width:24%}
+  .c-kad{width:14%}
+  .c-rating{width:8%}
 
   .win{color:var(--ok);font-weight:700}
   .loss{color:var(--bad);font-weight:700}
 
-  .map-icon{width:16px;height:16px;border-radius:3px;vertical-align:-3px;margin-right:6px;object-fit:cover}
+  .map-icon{
+  width:16px;
+  height:16px;
+  border-radius:3px;
+  vertical-align:-3px;
+  margin:0 10px 0 6px; /* 左边 6px，右边 10px，让图标和文字更远 */
+  object-fit:cover;
+}
+
 
   /* 五杀高亮：除 score 外的整行文字提亮 */
   tr.highlight td:not(.c-score){ color: var(--highlight); }
